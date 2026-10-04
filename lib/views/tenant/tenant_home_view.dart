@@ -8,8 +8,15 @@ import '../../widgets/skeleton_loader.dart';
 import '../../widgets/status_badge.dart';
 import '../../core/enums/task_status.dart';
 import '../../core/theme/app_colors.dart';
-
+import 'package:cached_network_image/cached_network_image.dart';
+import '../../widgets/full_screen_image_viewer.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import '../../services/storage_service.dart';
+import '../../widgets/notifications_bell.dart';
 import 'tenant_profile_view.dart';
+import 'tenant_alerts_view.dart';
+import 'tenant_dashboard_view.dart';
 
 class TenantHomeView extends StatefulWidget {
   final String tenantId;
@@ -41,6 +48,96 @@ class _TenantHomeViewState extends State<TenantHomeView> {
             tenantId: widget.tenantId,
             firestoreService: _firestoreService,
           ),
+        );
+      },
+    );
+  }
+
+  void _showRatingDialog(MaintenanceTaskModel task) {
+    int rating = 5;
+    final feedbackController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Confirm Completion'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Please rate the technician\'s work:'),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(5, (index) {
+                      return IconButton(
+                        icon: Icon(
+                          index < rating ? Icons.star : Icons.star_border,
+                          color: Colors.amber,
+                          size: 32,
+                        ),
+                        onPressed: () {
+                          setDialogState(() {
+                            rating = index + 1;
+                          });
+                        },
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: feedbackController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Feedback (Optional)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    Navigator.pop(context); // close dialog
+                    try {
+                      if (task.technicianId != null) {
+                        await _firestoreService.submitTenantRating(
+                          task.id,
+                          task.technicianId!,
+                          rating,
+                          feedbackController.text.trim().isEmpty ? null : feedbackController.text.trim(),
+                        );
+                      } else {
+                        await _firestoreService.updateTaskStatus(task.id, TaskStatus.completed);
+                      }
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Thank you for your feedback!')),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error: $e'),
+                            backgroundColor: Colors.red,
+                            duration: const Duration(seconds: 5),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('Submit'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -139,6 +236,97 @@ class _TenantHomeViewState extends State<TenantHomeView> {
                         ),
                       ],
                     ),
+                    if (task.preferredVisitDate != null && task.preferredVisitSlot != null) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryLight.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.primaryLight.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.calendar_month, size: 16, color: AppColors.primary),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                'Visit: ${DateFormat('MMM d, yyyy').format(task.preferredVisitDate!)} (${task.preferredVisitSlot!.split(':').first})',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (task.technicianName != null && task.technicianName!.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(Icons.person_outline, size: 16, color: AppColors.primary),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Assigned to: ${task.technicianName}',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (task.photoUrls != null && task.photoUrls!.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        height: 60,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: task.photoUrls!.length,
+                          separatorBuilder: (context, index) => const SizedBox(width: 8),
+                          itemBuilder: (context, index) {
+                            return GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => FullScreenImageViewer(
+                                      imageUrls: task.photoUrls!,
+                                      initialIndex: index,
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: CachedNetworkImage(
+                                  imageUrl: task.photoUrls![index],
+                                  width: 60,
+                                  height: 60,
+                                  fit: BoxFit.cover,
+                                  placeholder: (context, url) => Container(
+                                    width: 60,
+                                    height: 60,
+                                    color: Colors.grey[200],
+                                    child: const Center(child: CircularProgressIndicator()),
+                                  ),
+                                  errorWidget: (context, url, error) => Container(
+                                    width: 60,
+                                    height: 60,
+                                    color: Colors.grey[300],
+                                    child: const Icon(Icons.error),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                     if (task.status != TaskStatus.completed && task.status != TaskStatus.rejected) ...[
                       const SizedBox(height: 12),
                       const Divider(),
@@ -168,15 +356,16 @@ class _TenantHomeViewState extends State<TenantHomeView> {
                               label: const Text('Cancel'),
                               style: TextButton.styleFrom(foregroundColor: AppColors.statusRejectedText),
                             ),
-                          if (task.status == TaskStatus.pending) const SizedBox(width: 8),
-                          TextButton.icon(
-                            onPressed: () async {
-                              await _firestoreService.updateTaskStatus(task.id, TaskStatus.completed);
-                            },
-                            icon: const Icon(Icons.check_circle_outline, size: 18),
-                            label: const Text('Mark Resolved'),
-                            style: TextButton.styleFrom(foregroundColor: AppColors.statusCompletedText),
-                          ),
+                          if (task.status == TaskStatus.waitingConfirmation) const SizedBox(width: 8),
+                          if (task.status == TaskStatus.waitingConfirmation)
+                            TextButton.icon(
+                              onPressed: () {
+                                _showRatingDialog(task);
+                              },
+                              icon: const Icon(Icons.check_circle_outline, size: 18),
+                              label: const Text('Confirm Completion'),
+                              style: TextButton.styleFrom(foregroundColor: AppColors.statusCompletedText),
+                            ),
                         ],
                       ),
                     ],
@@ -194,12 +383,23 @@ class _TenantHomeViewState extends State<TenantHomeView> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_selectedIndex == 0 ? 'My Requests' : 'My Profile'),
+        title: Text(
+          _selectedIndex == 0 ? 'Dashboard' : 
+          _selectedIndex == 1 ? 'My Requests' : 
+          _selectedIndex == 2 ? 'Alerts' : 'My Profile'
+        ),
+        actions: const [
+          NotificationsBell(),
+        ],
       ),
       body: _selectedIndex == 0 
-          ? _buildRequestsView() 
-          : TenantProfileView(tenantId: widget.tenantId),
-      floatingActionButton: _selectedIndex == 0 
+          ? TenantDashboardView(tenantId: widget.tenantId)
+          : _selectedIndex == 1
+              ? _buildRequestsView()
+              : _selectedIndex == 2
+                  ? TenantAlertsView(tenantId: widget.tenantId)
+                  : TenantProfileView(tenantId: widget.tenantId),
+      floatingActionButton: _selectedIndex == 1 
           ? FloatingActionButton.extended(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
@@ -211,10 +411,19 @@ class _TenantHomeViewState extends State<TenantHomeView> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() => _selectedIndex = index),
+        type: BottomNavigationBarType.fixed,
         items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard),
+            label: 'Dashboard',
+          ),
           BottomNavigationBarItem(
             icon: Icon(Icons.list_alt),
             label: 'Requests',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.notifications),
+            label: 'Alerts',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person),
@@ -256,6 +465,52 @@ class _CreateRequestFormSheetState extends State<CreateRequestFormSheet> {
   bool _isSubmitting = false;
   bool _isLoadingUser = true;
   UserModel? _currentUser;
+  
+  List<File> _imageFiles = [];
+  final StorageService _storageService = StorageService();
+
+  DateTime? _selectedDate;
+  String? _selectedSlot;
+  final List<String> _slots = [
+    'Morning: 08:00 AM - 11:00 AM',
+    'Midday: 11:00 AM - 02:00 PM',
+    'Afternoon: 02:00 PM - 05:00 PM',
+  ];
+
+  Future<void> _pickImages(ImageSource source) async {
+    if (_imageFiles.length >= 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Maximum 3 photos allowed.')),
+      );
+      return;
+    }
+
+    if (source == ImageSource.gallery) {
+      final files = await _storageService.pickMultipleImages();
+      setState(() {
+        for (var file in files) {
+          if (_imageFiles.length < 3) {
+            _imageFiles.add(file);
+          }
+        }
+      });
+    } else {
+      final file = await _storageService.pickImage(ImageSource.camera);
+      if (file != null) {
+        setState(() {
+          if (_imageFiles.length < 3) {
+            _imageFiles.add(file);
+          }
+        });
+      }
+    }
+  }
+
+  void _removeImage(int index) {
+    setState(() {
+      _imageFiles.removeAt(index);
+    });
+  }
 
   @override
   void initState() {
@@ -286,9 +541,22 @@ class _CreateRequestFormSheetState extends State<CreateRequestFormSheet> {
     if (!_formKey.currentState!.validate() || _currentUser == null) return;
     
     FocusScope.of(context).unfocus();
+
+    if (_selectedDate == null || _selectedSlot == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a preferred visit date and time slot.')),
+      );
+      return;
+    }
+
     setState(() => _isSubmitting = true);
 
     try {
+      List<String>? photoUrls;
+      if (_imageFiles.isNotEmpty) {
+        photoUrls = await _storageService.uploadTaskPhotos(_imageFiles, widget.tenantId);
+      }
+
       final task = MaintenanceTaskModel(
         id: '', 
         tenantId: widget.tenantId,
@@ -297,6 +565,9 @@ class _CreateRequestFormSheetState extends State<CreateRequestFormSheet> {
         title: '$_selectedCategory Issue',
         description: _descController.text,
         category: _selectedCategory,
+        photoUrls: photoUrls,
+        preferredVisitDate: _selectedDate,
+        preferredVisitSlot: _selectedSlot,
         status: TaskStatus.pending,
         createdAt: DateTime.now(),
       );
@@ -409,6 +680,135 @@ class _CreateRequestFormSheetState extends State<CreateRequestFormSheet> {
               ),
               validator: (val) => val == null || val.trim().isEmpty ? 'Required' : null,
             ),
+            const SizedBox(height: 24),
+            const Text('Preferred Visit Schedule', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textPrimary)),
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: () async {
+                final now = DateTime.now();
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: _selectedDate ?? now.add(const Duration(days: 1)),
+                  firstDate: now,
+                  lastDate: now.add(const Duration(days: 14)),
+                  selectableDayPredicate: (date) {
+                    return date.weekday != DateTime.friday;
+                  },
+                );
+                if (picked != null) {
+                  setState(() => _selectedDate = picked);
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.border),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      _selectedDate == null 
+                        ? 'Select Date' 
+                        : DateFormat('EEEE, MMM d, yyyy').format(_selectedDate!),
+                      style: TextStyle(
+                        color: _selectedDate == null ? AppColors.textHint : AppColors.textPrimary,
+                      ),
+                    ),
+                    const Icon(Icons.calendar_today, color: AppColors.primary, size: 20),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _slots.map((slot) {
+                final isSelected = _selectedSlot == slot;
+                return ChoiceChip(
+                  label: Text(slot, style: const TextStyle(fontSize: 12)),
+                  selected: isSelected,
+                  onSelected: (selected) {
+                    setState(() => _selectedSlot = selected ? slot : null);
+                  },
+                  selectedColor: AppColors.primaryLight,
+                  labelStyle: TextStyle(color: isSelected ? Colors.white : AppColors.textPrimary),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 24),
+            // Image Picker Section
+            if (_imageFiles.isNotEmpty)
+              SizedBox(
+                height: 100,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _imageFiles.length,
+                  itemBuilder: (context, index) {
+                    return Stack(
+                      children: [
+                        Container(
+                          margin: const EdgeInsets.only(right: 8, top: 8),
+                          width: 100,
+                          height: 100,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.borderDark),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.file(_imageFiles[index], fit: BoxFit.cover),
+                          ),
+                        ),
+                        Positioned(
+                          top: 0,
+                          right: 0,
+                          child: GestureDetector(
+                            onTap: () => _removeImage(index),
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.close, color: Colors.white, size: 16),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            if (_imageFiles.length < 3)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () => _pickImages(ImageSource.camera),
+                      icon: const Icon(Icons.camera_alt),
+                      label: const Text('Camera'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.background,
+                        foregroundColor: AppColors.textPrimary,
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () => _pickImages(ImageSource.gallery),
+                      icon: const Icon(Icons.photo_library),
+                      label: const Text('Gallery'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.background,
+                        foregroundColor: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 32),
             SizedBox(
               height: 48,

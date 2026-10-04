@@ -64,3 +64,50 @@ exports.createTechnician = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('internal', error.message);
   }
 });
+
+// Trigger on new notification document
+exports.sendPushNotification = functions.firestore
+  .document("notifications/{docId}")
+  .onCreate(async (snap, context) => {
+    const notification = snap.data();
+    const userId = notification.userId;
+    const title = notification.title;
+    const message = notification.message;
+
+    if (!userId) {
+      console.log('No user ID found in notification.');
+      return null;
+    }
+
+    try {
+      // Get user document to retrieve fcmToken
+      const userDoc = await admin.firestore().collection('users').doc(userId).get();
+      if (!userDoc.exists) {
+        console.log(`User ${userId} not found.`);
+        return null;
+      }
+
+      const userData = userDoc.data();
+      const fcmToken = userData.fcmToken;
+
+      if (!fcmToken) {
+        console.log(`User ${userId} does not have an FCM token.`);
+        return null;
+      }
+
+      // Send Push Notification via FCM
+      const payload = {
+        notification: {
+          title: title || 'New Notification',
+          body: message || '',
+        },
+        token: fcmToken,
+      };
+
+      const response = await admin.messaging().send(payload);
+      console.log('Successfully sent push notification:', response);
+    } catch (error) {
+      console.error('Error sending push notification:', error);
+    }
+    return null;
+  });

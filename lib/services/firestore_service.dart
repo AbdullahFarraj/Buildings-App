@@ -3,6 +3,7 @@ import '../models/maintenance_task_model.dart';
 import '../models/user_model.dart';
 import '../core/enums/task_status.dart';
 import '../core/enums/user_role.dart';
+import 'notification_service.dart';
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -12,14 +13,22 @@ class FirestoreService {
 
   /// Creates a new maintenance task.
   Future<void> createTask(MaintenanceTaskModel task) async {
-    // If task.id is empty, Firestore will generate an ID.
-    // However, since MaintenanceTaskModel expects an ID, it's better to 
-    // generate a document reference first if the ID is meant to be new.
     DocumentReference docRef = task.id.isEmpty 
         ? _tasksCollection.doc() 
         : _tasksCollection.doc(task.id);
         
     await docRef.set(task.toMap());
+
+    // Notify Admins
+    final adminSnapshot = await _firestore.collection('users').where('role', isEqualTo: UserRole.admin.value).get();
+    for (var doc in adminSnapshot.docs) {
+      await NotificationService().sendNotification(
+        userId: doc.id,
+        title: 'New Maintenance Request 🔔',
+        message: 'A new request "${task.title}" was submitted for Apt ${task.apartmentNumber}.',
+        relatedTaskId: docRef.id,
+      );
+    }
   }
 
   /// Gets a stream of tasks submitted by a specific tenant.
@@ -66,12 +75,36 @@ class FirestoreService {
     });
   }
 
-  /// Assigns a task to a technician and updates status to approved.
-  Future<void> assignTask(String taskId, String technicianId) async {
+  /// Assigns a task to a technician and updates status to assigned.
+  Future<void> assignTask(String taskId, String technicianId, String technicianName) async {
     await _tasksCollection.doc(taskId).update({
       'technicianId': technicianId,
-      'status': TaskStatus.approved.value,
+      'technicianName': technicianName,
+      'status': TaskStatus.assigned.value,
     });
+    
+    // Notify the technician
+    await NotificationService().sendNotification(
+      userId: technicianId,
+      title: 'New Task Assigned 🛠️',
+      message: 'You have been assigned to a new maintenance task.',
+      relatedTaskId: taskId,
+    );
+
+    // Get the task to notify the tenant
+    final doc = await _tasksCollection.doc(taskId).get();
+    if (doc.exists && doc.data() != null) {
+      final data = doc.data() as Map<String, dynamic>;
+      final tenantId = data['tenantId'];
+      if (tenantId != null) {
+        await NotificationService().sendNotification(
+          userId: tenantId,
+          title: 'Technician Assigned 🧑‍🔧',
+          message: '$technicianName has been assigned to your request.',
+          relatedTaskId: taskId,
+        );
+      }
+    }
   }
 
   /// Updates the status of a task, optionally adding a completion proof URL or notes.
@@ -84,7 +117,7 @@ class FirestoreService {
       'status': status.value,
     };
 
-    if (status == TaskStatus.completed) {
+    if (status == TaskStatus.completed || status == TaskStatus.waitingConfirmation) {
       updates['completedAt'] = FieldValue.serverTimestamp();
       if (completionProofUrl != null) {
         updates['completionProofUrl'] = completionProofUrl;
@@ -93,8 +126,60 @@ class FirestoreService {
         updates['completionNotes'] = completionNotes;
       }
     }
-
     await _tasksCollection.doc(taskId).update(updates);
+
+    // Notify the tenant if the status is waitingConfirmation
+    if (status == TaskStatus.waitingConfirmation) {
+      final doc = await _tasksCollection.doc(taskId).get();
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data() as Map<String, dynamic>;
+        final tenantId = data['tenantId'];
+        if (tenantId != null) {
+          await NotificationService().sendNotification(
+            userId: tenantId,
+            title: 'Task Completed ✅',
+            message: 'Your maintenance request was marked as completed by the technician. Please confirm and rate.',
+            relatedTaskId: taskId,
+          );
+        }
+      }
+    }
+  }
+
+  /// Submits tenant rating and updates technician's overall rating
+  Future<void> submitTenantRating(String taskId, String technicianId, int rating, String? feedback) async {
+    // 1. Update Task (Always do this first to ensure status changes)
+    await _tasksCollection.doc(taskId).update({
+      'status': TaskStatus.completed.value,
+      'rating': rating,
+      'tenantFeedback': feedback,
+      'completedAt': FieldValue.serverTimestamp(),
+    });
+
+    // 2. Update Technician stats (Wrap in try-catch in case of permission issues)
+    try {
+      await _firestore.runTransaction((transaction) async {
+        final techRef = _firestore.collection('users').doc(technicianId);
+        final techDoc = await transaction.get(techRef);
+        
+        if (techDoc.exists && techDoc.data() != null) {
+          final data = techDoc.data()!;
+          final currentAverage = (data['averageRating'] as num?)?.toDouble() ?? 0.0;
+          final currentTotal = (data['totalRatings'] as num?)?.toInt() ?? 0;
+
+          final newTotal = currentTotal + 1;
+          final newAverage = ((currentAverage * currentTotal) + rating) / newTotal;
+
+          transaction.update(techRef, {
+            'averageRating': newAverage,
+            'totalRatings': newTotal,
+          });
+        }
+      });
+    } catch (e) {
+      print('Warning: Failed to update technician rating stats: $e');
+      // We don't rethrow because the task status was successfully updated.
+    }
   }
 
   /// Gets a list of all technicians

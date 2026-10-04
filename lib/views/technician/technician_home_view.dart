@@ -7,6 +7,13 @@ import '../../widgets/status_badge.dart';
 import '../../core/enums/task_status.dart';
 import '../../core/theme/app_colors.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../services/storage_service.dart';
+import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../../widgets/full_screen_image_viewer.dart';
+import '../../widgets/notifications_bell.dart';
 
 class TechnicianHomeView extends StatefulWidget {
   final String technicianId;
@@ -19,13 +26,36 @@ class TechnicianHomeView extends StatefulWidget {
 
 class _TechnicianHomeViewState extends State<TechnicianHomeView> {
   final FirestoreService _firestoreService = FirestoreService();
+  final StorageService _storageService = StorageService();
 
   Future<void> _startWork(MaintenanceTaskModel task) async {
     await _firestoreService.updateTaskStatus(task.id, TaskStatus.inProgress);
   }
 
+  void _callTenant(String tenantId) async {
+    final tenant = await _firestoreService.getUser(tenantId);
+    if (tenant != null && tenant.phone.isNotEmpty) {
+      final Uri uri = Uri.parse('tel:${tenant.phone}');
+      try {
+        final launched = await launchUrl(uri);
+        if (!launched && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not launch phone dialer')));
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error launching phone dialer')));
+        }
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tenant phone not available')));
+      }
+    }
+  }
+
   void _showCompletionDialog(MaintenanceTaskModel task) {
     final TextEditingController notesController = TextEditingController();
+    File? _selectedImage;
 
     showModalBottomSheet(
       context: context,
@@ -34,78 +64,124 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-            left: 16,
-            right: 16,
-            top: 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Complete Task',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+                left: 16,
+                right: 16,
+                top: 24,
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: notesController,
-                maxLines: 4,
-                decoration: InputDecoration(
-                  hintText: 'Add completion notes (optional)',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Complete Task',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () async {
-                  final notes = notesController.text.trim();
-                  
-                  // Show loading
-                  showDialog(
-                    context: context,
-                    barrierDismissible: false,
-                    builder: (_) => const Center(child: CircularProgressIndicator()),
-                  );
+                  const SizedBox(height: 16),
+                  if (_selectedImage != null)
+                    Stack(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.file(_selectedImage!, height: 120, width: double.infinity, fit: BoxFit.cover),
+                        ),
+                        Positioned(
+                          right: 4,
+                          top: 4,
+                          child: CircleAvatar(
+                            backgroundColor: Colors.black54,
+                            radius: 14,
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: const Icon(Icons.close, size: 16, color: Colors.white),
+                              onPressed: () {
+                                setSheetState(() => _selectedImage = null);
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final file = await _storageService.pickImage(ImageSource.camera);
+                        if (file != null) {
+                          setSheetState(() => _selectedImage = file);
+                        }
+                      },
+                      icon: const Icon(Icons.camera_alt),
+                      label: const Text('Add Proof Photo (Optional)'),
+                    ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: notesController,
+                    maxLines: 4,
+                    decoration: InputDecoration(
+                      hintText: 'Add completion notes (optional)',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () async {
+                      final notes = notesController.text.trim();
+                      
+                      // Show loading
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (_) => const Center(child: CircularProgressIndicator()),
+                      );
 
-                  try {
-                    await _firestoreService.updateTaskStatus(
-                      task.id,
-                      TaskStatus.completed,
-                      completionNotes: notes.isEmpty ? null : notes,
-                    );
-                    if (context.mounted) {
-                      Navigator.pop(context); // Close loading
-                      Navigator.pop(context); // Close bottom sheet
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Task marked as completed!')),
-                      );
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      Navigator.pop(context); // Close loading
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Error: $e')),
-                      );
-                    }
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.statusCompletedText, // Greenish color
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: const Text('Confirm Completion'),
+                      try {
+                        String? photoUrl;
+                        if (_selectedImage != null) {
+                          photoUrl = await _storageService.uploadCompletionProof(_selectedImage!, task.id);
+                        }
+
+                        await _firestoreService.updateTaskStatus(
+                          task.id,
+                          TaskStatus.waitingConfirmation,
+                          completionNotes: notes.isEmpty ? null : notes,
+                          completionProofUrl: photoUrl,
+                        );
+                        if (context.mounted) {
+                          Navigator.pop(context); // Close loading
+                          Navigator.pop(context); // Close bottom sheet
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Task marked as completed! Waiting for tenant confirmation.')),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          Navigator.pop(context); // Close loading
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Error: $e')),
+                          );
+                        }
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.statusCompletedText, // Greenish color
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: const Text('Confirm Completion'),
+                  ),
+                  const SizedBox(height: 24),
+                ],
               ),
-              const SizedBox(height: 24),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -117,6 +193,7 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
       appBar: AppBar(
         title: const Text('Technician Tasks'),
         actions: [
+          const NotificationsBell(),
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Logout',
@@ -154,8 +231,8 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
             separatorBuilder: (context, index) => const SizedBox(height: 16),
             itemBuilder: (context, index) {
               final task = tasks[index];
-              final isAssigned = task.status == TaskStatus.approved || task.status == TaskStatus.pending; 
-              // Wait, tasks are usually "approved" when assigned in our system, but let's check for both just in case.
+              final isAssigned = task.status == TaskStatus.assigned || task.status == TaskStatus.pending; 
+              // Wait, tasks are usually "assigned" when assigned in our system, but let's check for both just in case.
               final isInProgress = task.status == TaskStatus.inProgress;
               final isCompleted = task.status == TaskStatus.completed;
 
@@ -239,6 +316,80 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
                           ),
                         ],
                       ),
+                      if (task.preferredVisitDate != null && task.preferredVisitSlot != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.amber.withOpacity(0.5)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.calendar_month, size: 20, color: Colors.amber),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Visit Schedule: ${DateFormat('EEEE, MMM d').format(task.preferredVisitDate!)}\n${task.preferredVisitSlot}',
+                                  style: const TextStyle(
+                                    color: Colors.black87,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      
+                      if (task.photoUrls != null && task.photoUrls!.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          height: 60,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: task.photoUrls!.length,
+                            separatorBuilder: (context, index) => const SizedBox(width: 8),
+                            itemBuilder: (context, index) {
+                              return GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => FullScreenImageViewer(
+                                        imageUrls: task.photoUrls!,
+                                        initialIndex: index,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: CachedNetworkImage(
+                                    imageUrl: task.photoUrls![index],
+                                    width: 60,
+                                    height: 60,
+                                    fit: BoxFit.cover,
+                                    placeholder: (context, url) => Container(
+                                      width: 60,
+                                      height: 60,
+                                      color: Colors.grey[200],
+                                      child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                                    ),
+                                    errorWidget: (context, url, error) => Container(
+                                      width: 60,
+                                      height: 60,
+                                      color: Colors.grey[200],
+                                      child: const Icon(Icons.broken_image, color: Colors.grey),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
 
                       // Actions
                       if (!isCompleted) ...[
@@ -252,7 +403,16 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
                               padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
                           ),
-                        if (isInProgress)
+                        if (isInProgress) ...[
+                          OutlinedButton.icon(
+                            onPressed: () => _callTenant(task.tenantId),
+                            icon: const Icon(Icons.call),
+                            label: const Text('Call Tenant'),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
                           ElevatedButton.icon(
                             onPressed: () => _showCompletionDialog(task),
                             icon: const Icon(Icons.check),
@@ -263,8 +423,9 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
                               padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
                           ),
+                        ],
                       ],
-                      if (isCompleted) ...[
+                      if (isCompleted || task.status == TaskStatus.waitingConfirmation) ...[
                         const SizedBox(height: 16),
                         Container(
                           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -272,14 +433,16 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
                             color: Colors.green.shade50,
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.check_circle, color: Colors.green),
-                              SizedBox(width: 8),
+                              const Icon(Icons.check_circle, color: Colors.green),
+                              const SizedBox(width: 8),
                               Text(
-                                'Task Completed',
-                                style: TextStyle(
+                                task.status == TaskStatus.waitingConfirmation 
+                                  ? 'Waiting Tenant Confirmation'
+                                  : 'Task Completed',
+                                style: const TextStyle(
                                   color: Colors.green,
                                   fontWeight: FontWeight.bold,
                                 ),

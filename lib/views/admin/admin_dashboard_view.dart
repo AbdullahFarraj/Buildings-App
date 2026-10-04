@@ -11,6 +11,10 @@ import '../../core/theme/app_colors.dart';
 
 import 'admin_tenants_view.dart';
 import 'admin_technicians_view.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../../widgets/full_screen_image_viewer.dart';
+import 'admin_overview_tab.dart';
+import '../../widgets/notifications_bell.dart';
 
 class AdminDashboardView extends StatefulWidget {
   const AdminDashboardView({super.key});
@@ -144,7 +148,7 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
         if (_selectedFilter != 'All') {
           final statusMap = {
             'Pending': TaskStatus.pending,
-            'Assigned': TaskStatus.approved,
+            'Assigned': TaskStatus.assigned,
             'In Progress': TaskStatus.inProgress,
             'Completed': TaskStatus.completed,
           };
@@ -177,7 +181,7 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
                 side: const BorderSide(color: AppColors.border, width: 1),
               ),
               child: InkWell(
-                onTap: (task.status == TaskStatus.pending || task.status == TaskStatus.approved)
+                onTap: (task.status == TaskStatus.pending || task.status == TaskStatus.assigned)
                     ? () => _showAssignBottomSheet(context, task)
                     : null,
                 borderRadius: BorderRadius.circular(12),
@@ -275,9 +279,100 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
                               color: AppColors.textHint,
                             ),
                           ),
-                        ],
+                      ],
                       ),
-                      if (task.status == TaskStatus.pending || task.status == TaskStatus.approved) ...[
+                      if (task.preferredVisitDate != null && task.preferredVisitSlot != null) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryLight.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: AppColors.primaryLight.withOpacity(0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.calendar_month, size: 16, color: AppColors.primary),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  'Visit: ${DateFormat('MMM d, yyyy').format(task.preferredVisitDate!)} (${task.preferredVisitSlot!.split(':').first})',
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      if (task.technicianName != null && task.technicianName!.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Icon(Icons.person_outline, size: 16, color: AppColors.primary),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Assigned to: ${task.technicianName}',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      if (task.photoUrls != null && task.photoUrls!.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          height: 60,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: task.photoUrls!.length,
+                            separatorBuilder: (context, index) => const SizedBox(width: 8),
+                            itemBuilder: (context, index) {
+                              return GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => FullScreenImageViewer(
+                                        imageUrls: task.photoUrls!,
+                                        initialIndex: index,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: CachedNetworkImage(
+                                    imageUrl: task.photoUrls![index],
+                                    width: 60,
+                                    height: 60,
+                                    fit: BoxFit.cover,
+                                    placeholder: (context, url) => Container(
+                                      width: 60,
+                                      height: 60,
+                                      color: Colors.grey[200],
+                                      child: const Center(child: CircularProgressIndicator()),
+                                    ),
+                                    errorWidget: (context, url, error) => Container(
+                                      width: 60,
+                                      height: 60,
+                                      color: Colors.grey[300],
+                                      child: const Icon(Icons.error),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                      if (task.status == TaskStatus.pending || task.status == TaskStatus.assigned) ...[
                         const SizedBox(height: 12),
                         const Divider(),
                         Padding(
@@ -319,10 +414,12 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
           children: [
             Text(
               _selectedIndex == 0 
-                  ? 'Admin Dashboard' 
+                  ? 'Overview'
                   : _selectedIndex == 1 
-                      ? 'Tenant Directory' 
-                      : 'Technicians',
+                      ? 'Maintenance Requests' 
+                      : _selectedIndex == 2
+                          ? 'Tenant Directory' 
+                          : 'Technicians',
             ),
             if (!_isLoadingUser && _adminUser != null)
               Text(
@@ -332,13 +429,14 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
           ],
         ),
         actions: [
+          const NotificationsBell(),
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Logout',
             onPressed: _handleLogout,
           ),
         ],
-        bottom: _selectedIndex == 0 
+        bottom: _selectedIndex == 1 
           ? PreferredSize(
               preferredSize: const Size.fromHeight(48),
               child: SingleChildScrollView(
@@ -374,12 +472,17 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
             )
           : null,
       ),
-      body: _selectedIndex == 0 
-          ? _buildRequestsView() 
+      body: _selectedIndex == 0
+          ? AdminOverviewTab(
+              firestoreService: _firestoreService,
+              onNavigate: (index) => setState(() => _selectedIndex = index),
+            )
           : _selectedIndex == 1 
-              ? const AdminTenantsView()
-              : const AdminTechniciansView(),
-      floatingActionButton: _selectedIndex == 2
+              ? _buildRequestsView() 
+              : _selectedIndex == 2 
+                  ? const AdminTenantsView()
+                  : const AdminTechniciansView(),
+      floatingActionButton: _selectedIndex == 3
           ? FloatingActionButton(
               onPressed: () {
                 showModalBottomSheet(
@@ -406,6 +509,10 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.dashboard),
+            label: 'Overview',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.build),
             label: 'Requests',
           ),
           BottomNavigationBarItem(
@@ -417,6 +524,9 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
             label: 'Technicians',
           ),
         ],
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: AppColors.accent,
+        unselectedItemColor: AppColors.textHint,
       ),
     );
   }
@@ -451,6 +561,14 @@ class _AssignTechnicianSheetState extends State<AssignTechnicianSheet> {
       final techs = await widget.firestoreService.getTechnicians();
       if (mounted) {
         setState(() {
+          // Sort technicians: matches first
+          techs.sort((a, b) {
+            final aMatch = _isMatch(a.profession, widget.task.category);
+            final bMatch = _isMatch(b.profession, widget.task.category);
+            if (aMatch && !bMatch) return -1;
+            if (!aMatch && bMatch) return 1;
+            return a.name.compareTo(b.name);
+          });
           _technicians = techs;
           _isLoading = false;
         });
@@ -462,6 +580,19 @@ class _AssignTechnicianSheetState extends State<AssignTechnicianSheet> {
         });
       }
     }
+  }
+
+  bool _isMatch(String? profession, String category) {
+    if (profession == null) return false;
+    final p = profession.toLowerCase();
+    final c = category.toLowerCase();
+    if (c.contains('plumb') && p.contains('plumb')) return true;
+    if (c.contains('elect') && p.contains('elect')) return true;
+    if (c.contains('ac') && p.contains('ac')) return true;
+    if (c.contains('hvac') && p.contains('hvac')) return true;
+    if ((c.contains('carpet') || c.contains('carpent')) && p.contains('carpent')) return true;
+    if (p.contains(c) || c.contains(p)) return true;
+    return false;
   }
 
   @override
@@ -533,18 +664,27 @@ class _AssignTechnicianSheetState extends State<AssignTechnicianSheet> {
                         ),
                       ),
                       subtitle: Text(
-                        tech.phone,
+                        '${tech.profession ?? 'No profession'} • ${tech.phone}',
                         style: TextStyle(
                           color: isAssigned ? AppColors.statusApprovedText.withOpacity(0.8) : AppColors.textSecondary,
                         ),
                       ),
-                      trailing: isAssigned 
-                          ? const Icon(Icons.check_circle, color: AppColors.statusApprovedText)
-                          : null,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_isMatch(tech.profession, widget.task.category))
+                            const Padding(
+                              padding: EdgeInsets.only(right: 8.0),
+                              child: Icon(Icons.star, color: Colors.amber, size: 20),
+                            ),
+                          if (isAssigned)
+                            const Icon(Icons.check_circle, color: AppColors.statusApprovedText),
+                        ],
+                      ),
                       onTap: () async {
                         if (!isAssigned) {
                           // Show a loading indicator on the tile or just let it close
-                          await widget.firestoreService.assignTask(widget.task.id, tech.uid);
+                          await widget.firestoreService.assignTask(widget.task.id, tech.uid, tech.name);
                         }
                         if (context.mounted) {
                           Navigator.pop(context);

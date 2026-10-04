@@ -6,6 +6,7 @@ import 'views/auth/auth_wrapper.dart';
 import 'views/admin/admin_dashboard_view.dart';
 import 'views/tenant/tenant_home_view.dart';
 import 'views/technician/technician_home_view.dart';
+import 'views/splash/splash_view.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -29,7 +30,7 @@ class BuildingApp extends StatelessWidget {
       title: 'Building Maintenance',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: const AuthWrapper(),
+      home: const SplashView(),
       routes: {
         // These are here to support the mock navigation in LoginView until 
         // real Firebase Auth is wired up into it.

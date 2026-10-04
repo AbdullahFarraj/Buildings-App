@@ -9,13 +9,18 @@ class MaintenanceTaskModel {
   final String title;
   final String description;
   final String category;
-  final String? photoUrl;
+  final List<String>? photoUrls;
   final TaskStatus status;
   final String? technicianId;
+  final String? technicianName;
+  final DateTime? preferredVisitDate;
+  final String? preferredVisitSlot;
   final DateTime createdAt;
   final DateTime? completedAt;
   final String? completionProofUrl;
   final String? completionNotes;
+  final int? rating;
+  final String? tenantFeedback;
 
   MaintenanceTaskModel({
     required this.id,
@@ -25,13 +30,18 @@ class MaintenanceTaskModel {
     required this.title,
     required this.description,
     required this.category,
-    this.photoUrl,
+    this.photoUrls,
     required this.status,
     this.technicianId,
+    this.technicianName,
+    this.preferredVisitDate,
+    this.preferredVisitSlot,
     required this.createdAt,
     this.completedAt,
     this.completionProofUrl,
     this.completionNotes,
+    this.rating,
+    this.tenantFeedback,
   });
 
   factory MaintenanceTaskModel.fromMap(Map<String, dynamic> map, String documentId) {
@@ -43,13 +53,18 @@ class MaintenanceTaskModel {
       title: map['title'] ?? '',
       description: map['description'] ?? '',
       category: map['category'] ?? '',
-      photoUrl: map['photoUrl'],
+      photoUrls: map['photoUrls'] != null ? List<String>.from(map['photoUrls']) : null,
       status: TaskStatus.fromString(map['status'] ?? 'pending'),
       technicianId: map['technicianId'],
+      technicianName: map['technicianName'],
+      preferredVisitDate: (map['preferredVisitDate'] as Timestamp?)?.toDate(),
+      preferredVisitSlot: map['preferredVisitSlot'],
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       completedAt: (map['completedAt'] as Timestamp?)?.toDate(),
       completionProofUrl: map['completionProofUrl'],
       completionNotes: map['completionNotes'],
+      rating: map['rating'],
+      tenantFeedback: map['tenantFeedback'],
     );
   }
 
@@ -61,13 +76,18 @@ class MaintenanceTaskModel {
       'title': title,
       'description': description,
       'category': category,
-      'photoUrl': photoUrl,
+      'photoUrls': photoUrls,
       'status': status.value,
       'technicianId': technicianId,
+      'technicianName': technicianName,
+      'preferredVisitDate': preferredVisitDate != null ? Timestamp.fromDate(preferredVisitDate!) : null,
+      'preferredVisitSlot': preferredVisitSlot,
       'createdAt': Timestamp.fromDate(createdAt),
       'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
       'completionProofUrl': completionProofUrl,
       'completionNotes': completionNotes,
+      'rating': rating,
+      'tenantFeedback': tenantFeedback,
     };
   }
 
@@ -79,13 +99,18 @@ class MaintenanceTaskModel {
     String? title,
     String? description,
     String? category,
-    String? photoUrl,
+    List<String>? photoUrls,
     TaskStatus? status,
     String? technicianId,
+    String? technicianName,
+    DateTime? preferredVisitDate,
+    String? preferredVisitSlot,
     DateTime? createdAt,
     DateTime? completedAt,
     String? completionProofUrl,
     String? completionNotes,
+    int? rating,
+    String? tenantFeedback,
   }) {
     return MaintenanceTaskModel(
       id: id ?? this.id,
@@ -95,13 +120,18 @@ class MaintenanceTaskModel {
       title: title ?? this.title,
       description: description ?? this.description,
       category: category ?? this.category,
-      photoUrl: photoUrl ?? this.photoUrl,
+      photoUrls: photoUrls ?? this.photoUrls,
       status: status ?? this.status,
       technicianId: technicianId ?? this.technicianId,
+      technicianName: technicianName ?? this.technicianName,
+      preferredVisitDate: preferredVisitDate ?? this.preferredVisitDate,
+      preferredVisitSlot: preferredVisitSlot ?? this.preferredVisitSlot,
       createdAt: createdAt ?? this.createdAt,
       completedAt: completedAt ?? this.completedAt,
       completionProofUrl: completionProofUrl ?? this.completionProofUrl,
       completionNotes: completionNotes ?? this.completionNotes,
+      rating: rating ?? this.rating,
+      tenantFeedback: tenantFeedback ?? this.tenantFeedback,
     );
   }
 }

@@ -1,7 +1,8 @@
 enum TaskStatus {
   pending('pending'),
-  approved('approved'),
+  assigned('assigned'),
   inProgress('inProgress'),
+  waitingConfirmation('waitingConfirmation'),
   completed('completed'),
   rejected('rejected');
 

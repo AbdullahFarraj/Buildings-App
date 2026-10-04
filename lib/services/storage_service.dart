@@ -21,18 +21,31 @@ class StorageService {
     return null;
   }
 
-  /// Uploads the initial task issue photo and returns the download URL.
-  Future<String?> uploadTaskPhoto(File imageFile, String tenantId) async {
-    try {
-      final String fileName = _uuid.v4();
-      final Reference ref = _storage.ref().child('tasks/$tenantId/$fileName.jpg');
-      final UploadTask uploadTask = ref.putFile(imageFile);
-      final TaskSnapshot snapshot = await uploadTask;
-      return await snapshot.ref.getDownloadURL();
-    } catch (e) {
-      print('Error uploading task photo: $e');
-      return null;
+  /// Picks multiple images from the gallery.
+  Future<List<File>> pickMultipleImages() async {
+    final List<XFile> pickedFiles = await _picker.pickMultiImage(
+      imageQuality: 70,
+      maxWidth: 1024,
+    );
+    return pickedFiles.map((f) => File(f.path)).toList();
+  }
+
+  /// Uploads multiple initial task issue photos and returns the download URLs.
+  Future<List<String>> uploadTaskPhotos(List<File> imageFiles, String tenantId) async {
+    List<String> urls = [];
+    for (var file in imageFiles) {
+      try {
+        final String fileName = _uuid.v4();
+        final Reference ref = _storage.ref().child('tasks/$tenantId/$fileName.jpg');
+        final UploadTask uploadTask = ref.putFile(file);
+        final TaskSnapshot snapshot = await uploadTask;
+        final url = await snapshot.ref.getDownloadURL();
+        urls.add(url);
+      } catch (e) {
+        print('Error uploading task photo: $e');
+      }
     }
+    return urls;
   }
 
   /// Uploads the completion proof photo and returns the download URL.

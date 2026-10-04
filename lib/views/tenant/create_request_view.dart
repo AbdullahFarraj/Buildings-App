@@ -6,6 +6,7 @@ import '../../services/storage_service.dart';
 import '../../models/maintenance_task_model.dart';
 import '../../core/enums/task_status.dart';
 import '../../core/theme/app_colors.dart';
+import 'package:intl/intl.dart';
 
 class CreateRequestView extends StatefulWidget {
   final String tenantId;
@@ -28,14 +29,50 @@ class _CreateRequestViewState extends State<CreateRequestView> {
   String _selectedCategory = 'Plumbing';
   final List<String> _categories = ['Plumbing', 'Electrical', 'HVAC', 'Other'];
   
-  File? _imageFile;
+  List<File> _imageFiles = [];
   bool _isSubmitting = false;
 
-  Future<void> _pickImage() async {
-    final file = await _storageService.pickImage(ImageSource.gallery);
-    if (file != null) {
-      setState(() => _imageFile = file);
+  DateTime? _selectedDate;
+  String? _selectedSlot;
+  final List<String> _slots = [
+    'Morning: 08:00 AM - 11:00 AM',
+    'Midday: 11:00 AM - 02:00 PM',
+    'Afternoon: 02:00 PM - 05:00 PM',
+  ];
+
+  Future<void> _pickImages(ImageSource source) async {
+    if (_imageFiles.length >= 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Maximum 3 photos allowed.')),
+      );
+      return;
     }
+
+    if (source == ImageSource.gallery) {
+      final files = await _storageService.pickMultipleImages();
+      setState(() {
+        for (var file in files) {
+          if (_imageFiles.length < 3) {
+            _imageFiles.add(file);
+          }
+        }
+      });
+    } else {
+      final file = await _storageService.pickImage(ImageSource.camera);
+      if (file != null) {
+        setState(() {
+          if (_imageFiles.length < 3) {
+            _imageFiles.add(file);
+          }
+        });
+      }
+    }
+  }
+
+  void _removeImage(int index) {
+    setState(() {
+      _imageFiles.removeAt(index);
+    });
   }
 
   Future<void> _submitRequest() async {
@@ -44,12 +81,19 @@ class _CreateRequestViewState extends State<CreateRequestView> {
     // Dismiss keyboard
     FocusScope.of(context).unfocus();
 
+    if (_selectedDate == null || _selectedSlot == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a preferred visit date and time slot.')),
+      );
+      return;
+    }
+
     setState(() => _isSubmitting = true);
 
     try {
-      String? photoUrl;
-      if (_imageFile != null) {
-        photoUrl = await _storageService.uploadTaskPhoto(_imageFile!, widget.tenantId);
+      List<String>? photoUrls;
+      if (_imageFiles.isNotEmpty) {
+        photoUrls = await _storageService.uploadTaskPhotos(_imageFiles, widget.tenantId);
       }
 
       final task = MaintenanceTaskModel(
@@ -59,7 +103,9 @@ class _CreateRequestViewState extends State<CreateRequestView> {
         title: _titleController.text,
         description: _descController.text,
         category: _selectedCategory,
-        photoUrl: photoUrl,
+        photoUrls: photoUrls,
+        preferredVisitDate: _selectedDate,
+        preferredVisitSlot: _selectedSlot,
         status: TaskStatus.pending,
         createdAt: DateTime.now(),
       );
@@ -118,31 +164,135 @@ class _CreateRequestViewState extends State<CreateRequestView> {
                 validator: (val) => val == null || val.isEmpty ? 'Required' : null,
               ),
               const SizedBox(height: 24),
-              // Image Picker Section
-              GestureDetector(
-                onTap: _pickImage,
+              const Text('Preferred Visit Schedule', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () async {
+                  final now = DateTime.now();
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _selectedDate ?? now.add(const Duration(days: 1)),
+                    firstDate: now,
+                    lastDate: now.add(const Duration(days: 14)),
+                    selectableDayPredicate: (date) {
+                      // Block Fridays
+                      return date.weekday != DateTime.friday;
+                    },
+                  );
+                  if (picked != null) {
+                    setState(() => _selectedDate = picked);
+                  }
+                },
                 child: Container(
-                  height: 150,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
                   decoration: BoxDecoration(
-                    color: AppColors.background,
-                    border: Border.all(color: AppColors.borderDark, style: BorderStyle.solid),
-                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  child: _imageFile != null
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.file(_imageFile!, fit: BoxFit.cover),
-                        )
-                      : const Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.add_a_photo, color: AppColors.textHint, size: 32),
-                            SizedBox(height: 8),
-                            Text('Attach Photo', style: TextStyle(color: AppColors.textHint)),
-                          ],
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _selectedDate == null 
+                          ? 'Select Date' 
+                          : DateFormat('EEEE, MMM d, yyyy').format(_selectedDate!),
+                        style: TextStyle(
+                          color: _selectedDate == null ? AppColors.textHint : AppColors.textPrimary,
                         ),
+                      ),
+                      const Icon(Icons.calendar_today, color: AppColors.primary, size: 20),
+                    ],
+                  ),
                 ),
               ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _slots.map((slot) {
+                  final isSelected = _selectedSlot == slot;
+                  return ChoiceChip(
+                    label: Text(slot, style: const TextStyle(fontSize: 12)),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      setState(() => _selectedSlot = selected ? slot : null);
+                    },
+                    selectedColor: AppColors.primaryLight,
+                    labelStyle: TextStyle(color: isSelected ? Colors.white : AppColors.textPrimary),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 24),
+              // Image Picker Section
+              if (_imageFiles.isNotEmpty)
+                SizedBox(
+                  height: 100,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _imageFiles.length,
+                    itemBuilder: (context, index) {
+                      return Stack(
+                        children: [
+                          Container(
+                            margin: const EdgeInsets.only(right: 8, top: 8),
+                            width: 100,
+                            height: 100,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: AppColors.borderDark),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.file(_imageFiles[index], fit: BoxFit.cover),
+                            ),
+                          ),
+                          Positioned(
+                            top: 0,
+                            right: 0,
+                            child: GestureDetector(
+                              onTap: () => _removeImage(index),
+                              child: Container(
+                                padding: const EdgeInsets.all(2),
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.close, color: Colors.white, size: 16),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              if (_imageFiles.length < 3)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () => _pickImages(ImageSource.camera),
+                        icon: const Icon(Icons.camera_alt),
+                        label: const Text('Camera'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.background,
+                          foregroundColor: AppColors.textPrimary,
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () => _pickImages(ImageSource.gallery),
+                        icon: const Icon(Icons.photo_library),
+                        label: const Text('Gallery'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.background,
+                          foregroundColor: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               const SizedBox(height: 32),
               SizedBox(
                 height: 48,

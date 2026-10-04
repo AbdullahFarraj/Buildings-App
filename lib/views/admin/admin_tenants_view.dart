@@ -3,6 +3,7 @@ import '../../services/firestore_service.dart';
 import '../../models/user_model.dart';
 import '../../core/theme/app_colors.dart';
 import 'tenant_requests_view.dart';
+import 'admin_tenant_manage_view.dart';
 
 class AdminTenantsView extends StatefulWidget {
   const AdminTenantsView({super.key});
@@ -19,6 +20,15 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
   List<UserModel> _filteredTenants = [];
   bool _isLoading = true;
   String? _error;
+
+  String _selectedBuilding = 'All Buildings';
+  final List<String> _buildings = [
+    'All Buildings',
+    'Al nahda Building',
+    'Al barsha Building',
+    '77A Building',
+    'Al warsan #80 Building',
+  ];
 
   @override
   void initState() {
@@ -42,9 +52,9 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
       final tenants = await _firestoreService.getTenants();
       setState(() {
         _allTenants = tenants;
-        _filteredTenants = tenants;
         _isLoading = false;
       });
+      _applyFilters();
     } catch (e) {
       setState(() {
         _error = e.toString();
@@ -54,23 +64,27 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
   }
 
   void _onSearchChanged() {
+    _applyFilters();
+  }
+
+  void _applyFilters() {
     final query = _searchController.text.toLowerCase().trim();
     setState(() {
-      if (query.isEmpty) {
-        _filteredTenants = _allTenants;
-      } else {
-        _filteredTenants = _allTenants.where((t) {
-          final nameMatch = t.name.toLowerCase().contains(query);
-          final aptMatch = (t.apartmentId ?? '').toLowerCase().contains(query);
-          return nameMatch || aptMatch;
-        }).toList();
-      }
+      _filteredTenants = _allTenants.where((t) {
+        final nameMatch = t.name.toLowerCase().contains(query);
+        final aptMatch = (t.apartmentId ?? '').toLowerCase().contains(query);
+        final searchMatch = query.isEmpty || nameMatch || aptMatch;
+        
+        final buildingMatch = _selectedBuilding == 'All Buildings' || t.buildingId == _selectedBuilding;
+
+        return searchMatch && buildingMatch;
+      }).toList();
     });
   }
 
-  @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
           padding: const EdgeInsets.all(16.0),
@@ -89,6 +103,40 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
             ),
           ),
         ),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Row(
+            children: _buildings.map((building) {
+              final isSelected = building == _selectedBuilding;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: FilterChip(
+                  label: Text(building),
+                  selected: isSelected,
+                  onSelected: (selected) {
+                    setState(() {
+                      _selectedBuilding = building;
+                    });
+                    _applyFilters();
+                  },
+                  selectedColor: AppColors.primaryLight,
+                  labelStyle: TextStyle(
+                    color: isSelected ? Colors.white : AppColors.textPrimary,
+                  ),
+                  backgroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(
+                      color: isSelected ? AppColors.primary : AppColors.border,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 8),
         Expanded(
           child: _buildBody(),
         ),
@@ -200,9 +248,10 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
                   const Divider(),
                   Align(
                     alignment: Alignment.centerRight,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        children: [
                         TextButton.icon(
                           onPressed: () async {
                             final confirm = await showDialog<bool>(
@@ -236,7 +285,20 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
                             foregroundColor: Colors.red,
                           ),
                         ),
-                        const SizedBox(width: 8),
+
+                        TextButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => AdminTenantManageView(tenant: tenant),
+                              ),
+                            ).then((_) => _fetchTenants()); // refresh on return
+                          },
+                          icon: const Icon(Icons.manage_accounts, size: 18),
+                          label: const Text('Manage'),
+                        ),
+
                         TextButton.icon(
                           onPressed: () {
                             Navigator.push(
@@ -257,6 +319,7 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
                         ),
                       ],
                     ),
+                  ),
                   ),
                 ],
               ),

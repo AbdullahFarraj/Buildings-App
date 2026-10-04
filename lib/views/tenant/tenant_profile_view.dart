@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/firestore_service.dart';
 import '../../models/user_model.dart';
 import '../../core/theme/app_colors.dart';
@@ -16,6 +18,13 @@ class TenantProfileView extends StatefulWidget {
 class _TenantProfileViewState extends State<TenantProfileView> {
   final FirestoreService _firestoreService = FirestoreService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  late Future<UserModel?> _userFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _userFuture = _firestoreService.getUser(widget.tenantId);
+  }
 
   void _handleLogout() async {
     await _auth.signOut();
@@ -129,7 +138,7 @@ class _TenantProfileViewState extends State<TenantProfileView> {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<UserModel?>(
-      future: _firestoreService.getUser(widget.tenantId),
+      future: _userFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -183,7 +192,9 @@ class _TenantProfileViewState extends State<TenantProfileView> {
                   ),
                 ),
               ),
-              const SizedBox(height: 32),
+
+              
+              const SizedBox(height: 16),
               ElevatedButton.icon(
                 onPressed: () => _showEditProfileDialog(user),
                 icon: const Icon(Icons.edit),

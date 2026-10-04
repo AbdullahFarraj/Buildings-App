@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  // Primary
-  static const Color primary = Color(0xFF1E293B); // Deep Indigo/Navy
-  static const Color primaryLight = Color(0xFF334155);
+  // Primary (Elite Living Brand)
+  static const Color primary = Color(0xFF1E1E1E); // Dark/Black
+  static const Color accent = Color(0xFFFCAE1E); // Elite Living Yellow/Orange
+  static const Color primaryLight = Color(0xFF3A3A3A);
 
   // Background & Surface
   static const Color background = Color(0xFFF8FAFC); // Slate 50

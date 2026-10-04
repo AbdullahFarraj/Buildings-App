@@ -19,15 +19,20 @@ class StatusBadge extends StatelessWidget {
         textColor = AppColors.statusPendingText;
         label = 'Pending';
         break;
-      case TaskStatus.approved:
+      case TaskStatus.assigned:
         bgColor = AppColors.statusApprovedBg;
         textColor = AppColors.statusApprovedText;
-        label = 'Approved';
+        label = 'Assigned';
         break;
       case TaskStatus.inProgress:
         bgColor = AppColors.statusInProgressBg;
         textColor = AppColors.statusInProgressText;
         label = 'In Progress';
+        break;
+      case TaskStatus.waitingConfirmation:
+        bgColor = AppColors.statusPendingBg;
+        textColor = AppColors.statusPendingText;
+        label = 'Waiting Confirmation';
         break;
       case TaskStatus.completed:
         bgColor = AppColors.statusCompletedBg;

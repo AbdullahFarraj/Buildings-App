@@ -263,6 +263,19 @@ class _AdminTechniciansViewState extends State<AdminTechniciansView> {
                       ),
                     ],
                   ),
+                  if (technician.totalRatings != null && technician.totalRatings! > 0) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(Icons.star, color: Colors.amber, size: 16),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${technician.averageRating?.toStringAsFixed(1)} (${technician.totalRatings} ratings)',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   Row(
                     children: [
