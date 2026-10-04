@@ -11,9 +11,11 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/storage_service.dart';
 import 'dart:io';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:io';
 import '../../widgets/full_screen_image_viewer.dart';
 import '../../widgets/notifications_bell.dart';
+import '../../utils/contact_helper.dart';
+import '../shared/task_chat_sheet.dart';
 
 class TechnicianHomeView extends StatefulWidget {
   final String technicianId;
@@ -35,17 +37,18 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
   void _callTenant(String tenantId) async {
     final tenant = await _firestoreService.getUser(tenantId);
     if (tenant != null && tenant.phone.isNotEmpty) {
-      final Uri uri = Uri.parse('tel:${tenant.phone}');
-      try {
-        final launched = await launchUrl(uri);
-        if (!launched && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not launch phone dialer')));
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error launching phone dialer')));
-        }
+      ContactHelper.launchCall(tenant.phone);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tenant phone not available')));
       }
+    }
+  }
+
+  void _whatsappTenant(String tenantId) async {
+    final tenant = await _firestoreService.getUser(tenantId);
+    if (tenant != null && tenant.phone.isNotEmpty) {
+      ContactHelper.launchWhatsApp(tenant.phone);
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tenant phone not available')));
@@ -366,18 +369,12 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
                                 },
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(8),
-                                  child: CachedNetworkImage(
-                                    imageUrl: task.photoUrls![index],
+                                  child: Image.network(
+                                    task.photoUrls![index],
                                     width: 60,
                                     height: 60,
                                     fit: BoxFit.cover,
-                                    placeholder: (context, url) => Container(
-                                      width: 60,
-                                      height: 60,
-                                      color: Colors.grey[200],
-                                      child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                                    ),
-                                    errorWidget: (context, url, error) => Container(
+                                    errorBuilder: (context, error, stackTrace) => Container(
                                       width: 60,
                                       height: 60,
                                       color: Colors.grey[200],
@@ -404,13 +401,31 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
                             ),
                           ),
                         if (isInProgress) ...[
-                          OutlinedButton.icon(
-                            onPressed: () => _callTenant(task.tenantId),
-                            icon: const Icon(Icons.call),
-                            label: const Text('Call Tenant'),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                            ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () => _callTenant(task.tenantId),
+                                  icon: const Icon(Icons.call),
+                                  label: const Text('Call'),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () => _whatsappTenant(task.tenantId),
+                                  icon: const Icon(Icons.chat, color: Colors.green),
+                                  label: const Text('WhatsApp', style: TextStyle(color: Colors.green)),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                    side: const BorderSide(color: Colors.green),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 8),
                           ElevatedButton.icon(
@@ -425,6 +440,35 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
                           ),
                         ],
                       ],
+                      const SizedBox(height: 12),
+                      const Divider(),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton.icon(
+                            onPressed: () async {
+                              final user = await _firestoreService.getUser(widget.technicianId);
+                              if (context.mounted && user != null) {
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.transparent,
+                                  builder: (context) => Padding(
+                                    padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+                                    child: TaskChatSheet(
+                                      task: task,
+                                      currentUserId: user.uid,
+                                      currentUserName: user.name,
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                            label: const Text('Comments'),
+                          ),
+                        ],
+                      ),
                       if (isCompleted || task.status == TaskStatus.waitingConfirmation) ...[
                         const SizedBox(height: 16),
                         Container(

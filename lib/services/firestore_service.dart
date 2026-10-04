@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/maintenance_task_model.dart';
+import '../models/task_message_model.dart';
 import '../models/user_model.dart';
 import '../core/enums/task_status.dart';
 import '../core/enums/user_role.dart';
@@ -232,5 +233,52 @@ class FirestoreService {
   /// Deletes a user document
   Future<void> deleteUser(String uid) async {
     await _firestore.collection('users').doc(uid).delete();
+  }
+
+  // --- Task Chat / Comments ---
+
+  /// Get stream of messages for a specific task
+  Stream<List<TaskMessageModel>> getTaskMessages(String taskId) {
+    return _tasksCollection
+        .doc(taskId)
+        .collection('messages')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        return TaskMessageModel.fromMap(doc.data(), doc.id);
+      }).toList();
+    });
+  }
+
+  /// Add a message to a task
+  Future<void> addTaskMessage({
+    required String taskId,
+    required String senderId,
+    required String senderName,
+    required String text,
+    List<String> receiverIds = const [], // To notify them
+  }) async {
+    final message = TaskMessageModel(
+      id: '',
+      senderId: senderId,
+      senderName: senderName,
+      text: text,
+      createdAt: DateTime.now(),
+    );
+
+    await _tasksCollection.doc(taskId).collection('messages').add(message.toMap());
+
+    // Send notifications to receivers (Admin, Tech, or Tenant)
+    for (String receiverId in receiverIds) {
+      if (receiverId.isNotEmpty && receiverId != senderId) {
+        await NotificationService().sendNotification(
+          userId: receiverId,
+          title: 'New Message from $senderName 💬',
+          message: text,
+          relatedTaskId: taskId,
+        );
+      }
+    }
   }
 }

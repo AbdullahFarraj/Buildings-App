@@ -8,7 +8,6 @@ import '../../widgets/skeleton_loader.dart';
 import '../../widgets/status_badge.dart';
 import '../../core/enums/task_status.dart';
 import '../../core/theme/app_colors.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../../widgets/full_screen_image_viewer.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
@@ -17,6 +16,8 @@ import '../../widgets/notifications_bell.dart';
 import 'tenant_profile_view.dart';
 import 'tenant_alerts_view.dart';
 import 'tenant_dashboard_view.dart';
+import '../../utils/contact_helper.dart';
+import '../shared/task_chat_sheet.dart';
 
 class TenantHomeView extends StatefulWidget {
   final String tenantId;
@@ -270,13 +271,40 @@ class _TenantHomeViewState extends State<TenantHomeView> {
                         children: [
                           const Icon(Icons.person_outline, size: 16, color: AppColors.primary),
                           const SizedBox(width: 4),
-                          Text(
-                            'Assigned to: ${task.technicianName}',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.bold,
+                          Expanded(
+                            child: Text(
+                              'Assigned to: ${task.technicianName}',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
+                          if (task.technicianId != null)
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.phone, color: AppColors.primary, size: 20),
+                                  onPressed: () async {
+                                    final tech = await _firestoreService.getUser(task.technicianId!);
+                                    if (tech != null) ContactHelper.launchCall(tech.phone);
+                                  },
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  icon: const Icon(Icons.chat, color: Colors.green, size: 20),
+                                  onPressed: () async {
+                                    final tech = await _firestoreService.getUser(task.technicianId!);
+                                    if (tech != null) ContactHelper.launchWhatsApp(tech.phone);
+                                  },
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                              ],
+                            ),
                         ],
                       ),
                     ],
@@ -303,18 +331,12 @@ class _TenantHomeViewState extends State<TenantHomeView> {
                               },
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(8),
-                                child: CachedNetworkImage(
-                                  imageUrl: task.photoUrls![index],
+                                child: Image.network(
+                                  task.photoUrls![index],
                                   width: 60,
                                   height: 60,
                                   fit: BoxFit.cover,
-                                  placeholder: (context, url) => Container(
-                                    width: 60,
-                                    height: 60,
-                                    color: Colors.grey[200],
-                                    child: const Center(child: CircularProgressIndicator()),
-                                  ),
-                                  errorWidget: (context, url, error) => Container(
+                                  errorBuilder: (context, error, stackTrace) => Container(
                                     width: 60,
                                     height: 60,
                                     color: Colors.grey[300],
@@ -333,6 +355,29 @@ class _TenantHomeViewState extends State<TenantHomeView> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
+                          TextButton.icon(
+                            onPressed: () async {
+                              final user = await _firestoreService.getUser(widget.tenantId);
+                              if (context.mounted && user != null) {
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.transparent,
+                                  builder: (context) => Padding(
+                                    padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+                                    child: TaskChatSheet(
+                                      task: task,
+                                      currentUserId: user.uid,
+                                      currentUserName: user.name,
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                            label: const Text('Comments'),
+                          ),
+                          const Spacer(),
                           if (task.status == TaskStatus.pending)
                             TextButton.icon(
                               onPressed: () async {

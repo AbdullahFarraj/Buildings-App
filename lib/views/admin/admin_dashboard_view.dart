@@ -11,10 +11,11 @@ import '../../core/theme/app_colors.dart';
 
 import 'admin_tenants_view.dart';
 import 'admin_technicians_view.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../../widgets/full_screen_image_viewer.dart';
 import 'admin_overview_tab.dart';
 import '../../widgets/notifications_bell.dart';
+import '../../utils/contact_helper.dart';
+import '../shared/task_chat_sheet.dart';
 
 class AdminDashboardView extends StatefulWidget {
   const AdminDashboardView({super.key});
@@ -111,6 +112,30 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
                   Text('Building: ${tenant.buildingId ?? 'Not Set'}'),
                   const SizedBox(height: 8),
                   Text('Apartment: ${tenant.apartmentId ?? 'Not Set'}'),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () => ContactHelper.launchCall(tenant.phone),
+                        icon: const Icon(Icons.phone),
+                        label: const Text('Call'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () => ContactHelper.launchWhatsApp(tenant.phone),
+                        icon: const Icon(Icons.chat),
+                        label: const Text('WhatsApp'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
               actions: [
@@ -348,18 +373,12 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
                                 },
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(8),
-                                  child: CachedNetworkImage(
-                                    imageUrl: task.photoUrls![index],
+                                  child: Image.network(
+                                    task.photoUrls![index],
                                     width: 60,
                                     height: 60,
                                     fit: BoxFit.cover,
-                                    placeholder: (context, url) => Container(
-                                      width: 60,
-                                      height: 60,
-                                      color: Colors.grey[200],
-                                      child: const Center(child: CircularProgressIndicator()),
-                                    ),
-                                    errorWidget: (context, url, error) => Container(
+                                    errorBuilder: (context, error, stackTrace) => Container(
                                       width: 60,
                                       height: 60,
                                       color: Colors.grey[300],
@@ -393,7 +412,34 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
                             ],
                           ),
                         ),
-                      ]
+                      ],
+                      const SizedBox(height: 12),
+                      const Divider(),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton.icon(
+                            onPressed: () {
+                              if (_adminUser == null) return;
+                              showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true,
+                                backgroundColor: Colors.transparent,
+                                builder: (context) => Padding(
+                                  padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+                                  child: TaskChatSheet(
+                                    task: task,
+                                    currentUserId: _adminUser!.uid,
+                                    currentUserName: _adminUser!.name,
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                            label: const Text('Comments'),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -672,13 +718,29 @@ class _AssignTechnicianSheetState extends State<AssignTechnicianSheet> {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          IconButton(
+                            icon: const Icon(Icons.phone, color: AppColors.primary, size: 20),
+                            onPressed: () => ContactHelper.launchCall(tech.phone),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(Icons.chat, color: Colors.green, size: 20),
+                            onPressed: () => ContactHelper.launchWhatsApp(tech.phone),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
                           if (_isMatch(tech.profession, widget.task.category))
                             const Padding(
-                              padding: EdgeInsets.only(right: 8.0),
+                              padding: EdgeInsets.only(left: 8.0),
                               child: Icon(Icons.star, color: Colors.amber, size: 20),
                             ),
                           if (isAssigned)
-                            const Icon(Icons.check_circle, color: AppColors.statusApprovedText),
+                            const Padding(
+                              padding: EdgeInsets.only(left: 8.0),
+                              child: Icon(Icons.check_circle, color: AppColors.statusApprovedText),
+                            ),
                         ],
                       ),
                       onTap: () async {
