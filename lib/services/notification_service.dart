@@ -40,6 +40,23 @@ class NotificationService {
     await batch.commit();
   }
 
+  /// Mark all notifications for a specific chat as read for a user
+  Future<void> markChatNotificationsAsRead(String userId, String chatId) async {
+    final snapshot = await _notificationsCollection
+        .where('userId', isEqualTo: userId)
+        .where('relatedTaskId', isEqualTo: chatId)
+        .where('isRead', isEqualTo: false)
+        .get();
+
+    if (snapshot.docs.isEmpty) return;
+
+    final batch = _firestore.batch();
+    for (var doc in snapshot.docs) {
+      batch.update(doc.reference, {'isRead': true});
+    }
+    await batch.commit();
+  }
+
   /// Send a notification to a specific user
   Future<void> sendNotification({
     required String userId,
@@ -76,6 +93,28 @@ class NotificationService {
         'message': message,
         'isRead': false,
         'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  }
+
+  /// Send a notification to all admins
+  Future<void> notifyAdmins({
+    required String title,
+    required String message,
+    String? relatedTaskId,
+  }) async {
+    final adminsSnapshot = await _firestore.collection('users').where('role', isEqualTo: 'admin').get();
+    final batch = _firestore.batch();
+    for (var doc in adminsSnapshot.docs) {
+      final docRef = _notificationsCollection.doc();
+      batch.set(docRef, {
+        'userId': doc.id,
+        'title': title,
+        'message': message,
+        'isRead': false,
+        'createdAt': FieldValue.serverTimestamp(),
+        'relatedTaskId': relatedTaskId,
       });
     }
     await batch.commit();

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/firestore_service.dart';
 import '../../models/user_model.dart';
 import '../../core/theme/app_colors.dart';
 import 'tenant_requests_view.dart';
 import 'admin_tenant_manage_view.dart';
+import '../shared/chat_sheet.dart';
 
 class AdminTenantsView extends StatefulWidget {
   const AdminTenantsView({super.key});
@@ -283,6 +285,39 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
                           label: const Text('Delete'),
                           style: TextButton.styleFrom(
                             foregroundColor: Colors.red,
+                          ),
+                        ),
+
+                        TextButton.icon(
+                          onPressed: () async {
+                            final currentAdmin = FirebaseAuth.instance.currentUser;
+                            if (currentAdmin == null) return;
+                            
+                            // Get admin user model
+                            final adminModel = await _firestoreService.getUser(currentAdmin.uid);
+                            if (adminModel == null || !mounted) return;
+
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: Colors.transparent,
+                              builder: (context) => Padding(
+                                padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+                                child: ChatSheet(
+                                  chatId: tenant.uid, // Direct chat between tenant and administration
+                                  chatTitle: tenant.name,
+                                  currentUserId: adminModel.uid,
+                                  currentUserName: adminModel.name,
+                                  isDirectChat: true,
+                                  receiverIds: [tenant.uid],
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.chat, size: 18),
+                          label: const Text('Chat'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.green,
                           ),
                         ),
 

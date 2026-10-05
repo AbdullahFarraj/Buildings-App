@@ -257,6 +257,8 @@ class FirestoreService {
     required String senderId,
     required String senderName,
     required String text,
+    String? fileUrl,
+    String? fileName,
     List<String> receiverIds = const [], // To notify them
   }) async {
     final message = TaskMessageModel(
@@ -264,6 +266,8 @@ class FirestoreService {
       senderId: senderId,
       senderName: senderName,
       text: text,
+      fileUrl: fileUrl,
+      fileName: fileName,
       createdAt: DateTime.now(),
     );
 
@@ -275,9 +279,76 @@ class FirestoreService {
         await NotificationService().sendNotification(
           userId: receiverId,
           title: 'New Message from $senderName 💬',
-          message: text,
+          message: text.isNotEmpty ? text : 'Sent an attachment',
           relatedTaskId: taskId,
         );
+      }
+    }
+  }
+
+  // --- Direct Chat ---
+
+  /// Get stream of messages for a direct chat
+  Stream<List<TaskMessageModel>> getDirectChatMessages(String chatId) {
+    return _firestore.collection('direct_chats')
+        .doc(chatId)
+        .collection('messages')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        return TaskMessageModel.fromMap(doc.data(), doc.id);
+      }).toList();
+    });
+  }
+
+  /// Add a message to a direct chat
+  Future<void> addDirectChatMessage({
+    required String chatId,
+    required String senderId,
+    required String senderName,
+    required String text,
+    String? fileUrl,
+    String? fileName,
+    List<String> receiverIds = const [], // To notify them
+  }) async {
+    final message = TaskMessageModel(
+      id: '',
+      senderId: senderId,
+      senderName: senderName,
+      text: text,
+      fileUrl: fileUrl,
+      fileName: fileName,
+      createdAt: DateTime.now(),
+    );
+
+    await _firestore.collection('direct_chats').doc(chatId).collection('messages').add(message.toMap());
+    
+    // Also update the parent document so it exists and has the latest timestamp
+    await _firestore.collection('direct_chats').doc(chatId).set({
+      'lastMessageAt': FieldValue.serverTimestamp(),
+      'lastMessage': text.isNotEmpty ? text : (fileName != null ? 'Attachment: $fileName' : 'New Message'),
+      'lastSenderName': senderName,
+    }, SetOptions(merge: true));
+
+    // Send notifications to receivers
+    if (receiverIds.isEmpty) {
+      // If no receivers are specified, it's a message from Tenant to Management
+      await NotificationService().notifyAdmins(
+        title: 'Management Chat - $senderName 💬',
+        message: text.isNotEmpty ? text : (fileName != null ? 'Sent an attachment: $fileName' : 'New Message'),
+        relatedTaskId: chatId, // Using chatId as related ID so they know who sent it
+      );
+    } else {
+      for (String receiverId in receiverIds) {
+        if (receiverId.isNotEmpty && receiverId != senderId) {
+          await NotificationService().sendNotification(
+            userId: receiverId,
+            title: 'New Message from $senderName 💬',
+            message: text.isNotEmpty ? text : (fileName != null ? 'Sent an attachment: $fileName' : 'New Message'),
+            relatedTaskId: chatId,
+          );
+        }
       }
     }
   }

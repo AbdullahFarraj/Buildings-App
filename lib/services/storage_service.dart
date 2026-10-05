@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
@@ -58,6 +59,34 @@ class StorageService {
       return await snapshot.ref.getDownloadURL();
     } catch (e) {
       print('Error uploading completion proof: $e');
+      return null;
+    }
+  }
+
+  /// Uploads a generic file (document or image) for a chat and returns the download URL.
+  Future<String?> uploadChatFile(File file, String chatId, String fileName) async {
+    try {
+      final String uniqueFileName = '${_uuid.v4()}_$fileName';
+      final Reference ref = _storage.ref().child('chats/$chatId/$uniqueFileName');
+      final UploadTask uploadTask = ref.putFile(file);
+      final TaskSnapshot snapshot = await uploadTask;
+      return await snapshot.ref.getDownloadURL();
+    } catch (e) {
+      print('Error uploading chat file: $e');
+      return null;
+    }
+  }
+
+  /// Uploads a generic file using bytes (required for Web)
+  Future<String?> uploadChatFileBytes(Uint8List bytes, String chatId, String fileName) async {
+    try {
+      final String uniqueFileName = '${_uuid.v4()}_$fileName';
+      final Reference ref = _storage.ref().child('chats/$chatId/$uniqueFileName');
+      final UploadTask uploadTask = ref.putData(bytes);
+      final TaskSnapshot snapshot = await uploadTask;
+      return await snapshot.ref.getDownloadURL();
+    } catch (e) {
+      print('Error uploading chat file bytes: $e');
       return null;
     }
   }

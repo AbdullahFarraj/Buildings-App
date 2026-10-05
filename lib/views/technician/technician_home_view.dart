@@ -15,7 +15,7 @@ import 'dart:io';
 import '../../widgets/full_screen_image_viewer.dart';
 import '../../widgets/notifications_bell.dart';
 import '../../utils/contact_helper.dart';
-import '../shared/task_chat_sheet.dart';
+import '../shared/chat_sheet.dart';
 
 class TechnicianHomeView extends StatefulWidget {
   final String technicianId;
@@ -455,10 +455,15 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
                                   backgroundColor: Colors.transparent,
                                   builder: (context) => Padding(
                                     padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-                                    child: TaskChatSheet(
-                                      task: task,
+                                    child: ChatSheet(
+                                      chatId: task.id,
+                                      chatTitle: task.title,
                                       currentUserId: user.uid,
                                       currentUserName: user.name,
+                                      isDirectChat: false,
+                                      receiverIds: [
+                                        task.tenantId,
+                                      ],
                                     ),
                                   ),
                                 );

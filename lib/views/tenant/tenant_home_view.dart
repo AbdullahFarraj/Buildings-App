@@ -17,7 +17,7 @@ import 'tenant_profile_view.dart';
 import 'tenant_alerts_view.dart';
 import 'tenant_dashboard_view.dart';
 import '../../utils/contact_helper.dart';
-import '../shared/task_chat_sheet.dart';
+import '../shared/chat_sheet.dart';
 
 class TenantHomeView extends StatefulWidget {
   final String tenantId;
@@ -365,10 +365,15 @@ class _TenantHomeViewState extends State<TenantHomeView> {
                                   backgroundColor: Colors.transparent,
                                   builder: (context) => Padding(
                                     padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-                                    child: TaskChatSheet(
-                                      task: task,
+                                    child: ChatSheet(
+                                      chatId: task.id,
+                                      chatTitle: task.title,
                                       currentUserId: user.uid,
                                       currentUserName: user.name,
+                                      isDirectChat: false,
+                                      receiverIds: [
+                                        if (task.technicianId != null && task.technicianId != user.uid) task.technicianId!,
+                                      ],
                                     ),
                                   ),
                                 );

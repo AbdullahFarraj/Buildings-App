@@ -5,6 +5,8 @@ class TaskMessageModel {
   final String senderId;
   final String senderName;
   final String text;
+  final String? fileUrl;
+  final String? fileName;
   final DateTime createdAt;
 
   TaskMessageModel({
@@ -12,6 +14,8 @@ class TaskMessageModel {
     required this.senderId,
     required this.senderName,
     required this.text,
+    this.fileUrl,
+    this.fileName,
     required this.createdAt,
   });
 
@@ -21,6 +25,8 @@ class TaskMessageModel {
       senderId: map['senderId'] ?? '',
       senderName: map['senderName'] ?? 'Unknown',
       text: map['text'] ?? '',
+      fileUrl: map['fileUrl'],
+      fileName: map['fileName'],
       createdAt: map['createdAt'] != null 
           ? (map['createdAt'] as Timestamp).toDate() 
           : DateTime.now(),
@@ -32,6 +38,8 @@ class TaskMessageModel {
       'senderId': senderId,
       'senderName': senderName,
       'text': text,
+      'fileUrl': fileUrl,
+      'fileName': fileName,
       'createdAt': FieldValue.serverTimestamp(),
     };
   }

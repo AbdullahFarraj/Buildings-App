@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../services/firestore_service.dart';
 import '../../models/user_model.dart';
 import '../../core/theme/app_colors.dart';
+import '../shared/chat_sheet.dart';
 
 class TenantDashboardView extends StatefulWidget {
   final String tenantId;
@@ -75,7 +76,38 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
               const SizedBox(height: 32),
 
               // Property Details Card
-              _buildSectionTitle('Property Details'),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _buildSectionTitle('Property Details'),
+                  TextButton.icon(
+                    onPressed: () {
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.transparent,
+                        builder: (context) => Padding(
+                          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+                          child: ChatSheet(
+                            chatId: user.uid, // Direct chat between tenant and administration
+                            chatTitle: 'Building Management',
+                            currentUserId: user.uid,
+                            currentUserName: user.name,
+                            isDirectChat: true,
+                            receiverIds: const [], // Admins listen to all chats or we could add admin IDs
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.chat),
+                    label: const Text('Contact Management'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      backgroundColor: AppColors.primaryLight.withOpacity(0.1),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 12),
               Card(
                 elevation: 0,

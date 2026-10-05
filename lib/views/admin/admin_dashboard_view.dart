@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import '../../services/firestore_service.dart';
 import '../../models/maintenance_task_model.dart';
 import '../../models/user_model.dart';
+import '../../models/notification_model.dart';
+import '../../services/notification_service.dart';
 import '../../widgets/skeleton_loader.dart';
 import '../../widgets/status_badge.dart';
 import '../../core/enums/task_status.dart';
@@ -11,11 +13,12 @@ import '../../core/theme/app_colors.dart';
 
 import 'admin_tenants_view.dart';
 import 'admin_technicians_view.dart';
+import 'admin_inbox_view.dart';
 import '../../widgets/full_screen_image_viewer.dart';
 import 'admin_overview_tab.dart';
 import '../../widgets/notifications_bell.dart';
 import '../../utils/contact_helper.dart';
-import '../shared/task_chat_sheet.dart';
+import '../shared/chat_sheet.dart';
 
 class AdminDashboardView extends StatefulWidget {
   const AdminDashboardView({super.key});
@@ -427,10 +430,16 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
                                 backgroundColor: Colors.transparent,
                                 builder: (context) => Padding(
                                   padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-                                  child: TaskChatSheet(
-                                    task: task,
+                                  child: ChatSheet(
+                                    chatId: task.id,
+                                    chatTitle: task.title,
                                     currentUserId: _adminUser!.uid,
                                     currentUserName: _adminUser!.name,
+                                    isDirectChat: false,
+                                    receiverIds: [
+                                      task.tenantId,
+                                      if (task.technicianId != null) task.technicianId!,
+                                    ],
                                   ),
                                 ),
                               );
@@ -527,7 +536,9 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
               ? _buildRequestsView() 
               : _selectedIndex == 2 
                   ? const AdminTenantsView()
-                  : const AdminTechniciansView(),
+                  : _selectedIndex == 3
+                      ? const AdminTechniciansView()
+                      : const AdminInboxView(),
       floatingActionButton: _selectedIndex == 3
           ? FloatingActionButton(
               onPressed: () {
@@ -552,22 +563,38 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() => _selectedIndex = index),
-        items: const [
-          BottomNavigationBarItem(
+        items: [
+          const BottomNavigationBarItem(
             icon: Icon(Icons.dashboard),
             label: 'Overview',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.build),
             label: 'Requests',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.group),
             label: 'Tenants',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.engineering),
             label: 'Technicians',
+          ),
+          BottomNavigationBarItem(
+            icon: StreamBuilder<List<NotificationModel>>(
+              stream: NotificationService().getUserNotifications(FirebaseAuth.instance.currentUser?.uid ?? ''),
+              builder: (context, snapshot) {
+                final notifications = snapshot.data ?? [];
+                // Only count unread messages/chats notifications for the Inbox badge
+                final unreadChats = notifications.where((n) => !n.isRead && (n.title.contains('Chat') || n.title.contains('Message'))).length;
+                return Badge(
+                  isLabelVisible: unreadChats > 0,
+                  label: Text(unreadChats.toString()),
+                  child: const Icon(Icons.mail),
+                );
+              }
+            ),
+            label: 'Inbox',
           ),
         ],
         type: BottomNavigationBarType.fixed,

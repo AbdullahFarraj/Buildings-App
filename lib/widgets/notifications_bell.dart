@@ -4,6 +4,7 @@ import '../services/notification_service.dart';
 import '../models/notification_model.dart';
 import '../core/theme/app_colors.dart';
 import 'package:intl/intl.dart';
+import '../views/shared/chat_sheet.dart';
 
 class NotificationsBell extends StatelessWidget {
   const NotificationsBell({super.key});
@@ -118,7 +119,7 @@ class NotificationsBell extends StatelessWidget {
                           separatorBuilder: (context, index) => const Divider(height: 1),
                           itemBuilder: (context, index) {
                             final notification = notifications[index];
-                            return _buildNotificationItem(notification, service);
+                            return _buildNotificationItem(context, notification, service);
                           },
                         ),
                 ),
@@ -130,77 +131,161 @@ class NotificationsBell extends StatelessWidget {
     );
   }
 
-  Widget _buildNotificationItem(NotificationModel notification, NotificationService service) {
+  Widget _buildNotificationItem(BuildContext context, NotificationModel notification, NotificationService service) {
     return InkWell(
-      onTap: () {
+      onTap: () async {
         if (!notification.isRead) {
           service.markAsRead(notification.id);
         }
-        // If relatedTaskId is not null, we could potentially navigate to the task details.
+        
+        if (notification.relatedTaskId != null && notification.title.contains('Chat')) {
+          final user = FirebaseAuth.instance.currentUser;
+          if (user != null) {
+            final userName = user.displayName ?? 'User'; // Or fetch from Firestore if needed
+            
+            // Extract the sender's name from title if possible
+            String chatTitle = 'Chat';
+            if (notification.title.contains('-')) {
+              chatTitle = notification.title.split('-').last.replaceAll('💬', '').trim();
+            } else if (notification.title.contains('from')) {
+              chatTitle = notification.title.split('from').last.replaceAll('💬', '').trim();
+            }
+
+            // We need BuildContext context.
+            showModalBottomSheet(
+              context: context, // Note: We need context passed to this function
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (ctx) => Padding(
+                padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+                child: ChatSheet(
+                  chatId: notification.relatedTaskId!,
+                  chatTitle: chatTitle,
+                  currentUserId: user.uid,
+                  currentUserName: userName, // Using displayName for simplicity here
+                  isDirectChat: true, // Assuming direct chat for these management notifications for now
+                  receiverIds: const [], // Admin doesn't need to specify receivers to reply to tenant, or we could pass tenant.uid
+                ),
+              ),
+            );
+          }
+        }
       },
       child: Container(
-        color: notification.isRead ? Colors.transparent : AppColors.primaryLight.withOpacity(0.05),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        color: notification.isRead ? Colors.transparent : AppColors.primaryLight.withOpacity(0.08),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: notification.isRead ? AppColors.border : AppColors.accent.withOpacity(0.2),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.notifications,
-                color: notification.isRead ? Colors.grey : AppColors.accent,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
+            _buildNotificationIcon(notification.title, notification.isRead),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    notification.title,
-                    style: TextStyle(
-                      fontWeight: notification.isRead ? FontWeight.normal : FontWeight.bold,
-                      fontSize: 15,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    notification.message,
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
-                      height: 1.3,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          notification.title,
+                          style: TextStyle(
+                            fontWeight: notification.isRead ? FontWeight.w500 : FontWeight.bold,
+                            fontSize: 16,
+                            color: AppColors.textPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _formatDate(notification.createdAt),
+                        style: TextStyle(
+                          color: notification.isRead ? AppColors.textHint : AppColors.primary,
+                          fontSize: 12,
+                          fontWeight: notification.isRead ? FontWeight.normal : FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    DateFormat('MMM d, h:mm a').format(notification.createdAt),
-                    style: const TextStyle(
-                      color: AppColors.textHint,
-                      fontSize: 11,
+                    notification.message,
+                    style: TextStyle(
+                      color: notification.isRead ? AppColors.textSecondary : AppColors.textPrimary.withOpacity(0.85),
+                      fontSize: 14,
+                      height: 1.3,
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
             ),
-            if (!notification.isRead)
+            if (!notification.isRead) ...[
+              const SizedBox(width: 12),
               Container(
-                margin: const EdgeInsets.only(top: 8),
-                width: 8,
-                height: 8,
+                width: 10,
+                height: 10,
                 decoration: const BoxDecoration(
                   color: AppColors.primary,
                   shape: BoxShape.circle,
                 ),
               ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildNotificationIcon(String title, bool isRead) {
+    IconData iconData = Icons.notifications;
+    Color bgColor = isRead ? Colors.grey.shade200 : AppColors.primaryLight.withOpacity(0.2);
+    Color iconColor = isRead ? Colors.grey.shade600 : AppColors.primary;
+
+    if (title.contains('Chat') || title.contains('Message')) {
+      iconData = Icons.chat_bubble_rounded;
+      if (!isRead) {
+        bgColor = Colors.green.shade100;
+        iconColor = Colors.green.shade700;
+      }
+    } else if (title.contains('Expiring') || title.contains('⚠️')) {
+      iconData = Icons.warning_rounded;
+      if (!isRead) {
+        bgColor = Colors.orange.shade100;
+        iconColor = Colors.orange.shade700;
+      }
+    }
+
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: bgColor,
+        shape: BoxShape.circle,
+      ),
+      child: Icon(
+        iconData,
+        color: iconColor,
+        size: 24,
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final dateToCheck = DateTime(date.year, date.month, date.day);
+
+    if (dateToCheck == today) {
+      return DateFormat('h:mm a').format(date);
+    } else if (dateToCheck == yesterday) {
+      return 'Yesterday';
+    } else {
+      return DateFormat('MMM d').format(date);
+    }
   }
 }
