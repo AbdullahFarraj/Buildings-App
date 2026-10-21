@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import '../../services/firestore_service.dart';
@@ -516,7 +517,7 @@ class _CreateRequestFormSheetState extends State<CreateRequestFormSheet> {
   bool _isLoadingUser = true;
   UserModel? _currentUser;
   
-  List<File> _imageFiles = [];
+  List<XFile> _imageFiles = [];
   final StorageService _storageService = StorageService();
 
   DateTime? _selectedDate;
@@ -809,7 +810,15 @@ class _CreateRequestFormSheetState extends State<CreateRequestFormSheet> {
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(12),
-                            child: Image.file(_imageFiles[index], fit: BoxFit.cover),
+                            child: kIsWeb
+                                ? Image.network(
+                                    _imageFiles[index].path,
+                                    fit: BoxFit.cover,
+                                  )
+                                : Image.file(
+                                    File(_imageFiles[index].path),
+                                    fit: BoxFit.cover,
+                                  ),
                           ),
                         ),
                         Positioned(

@@ -43,3 +43,14 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Security & Credentials (DO NOT COMMIT)
+*serviceAccountKey*.json
+serviceAccountKey.json
+*.pem
+*.key
+.env*
+
+# Node / Sync Service
+**/node_modules/
+npm-debug.log*

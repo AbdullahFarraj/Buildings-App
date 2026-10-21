@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/maintenance_task_model.dart';
 import '../models/task_message_model.dart';
 import '../models/user_model.dart';
+import '../models/contract_model.dart';
 import '../core/enums/task_status.dart';
 import '../core/enums/user_role.dart';
 import 'notification_service.dart';
@@ -205,6 +206,29 @@ class FirestoreService {
     return snapshot.docs.map((doc) {
       return UserModel.fromMap(doc.data(), doc.id);
     }).toList();
+  }
+
+  /// Gets a list of all contracts
+  Future<List<ContractModel>> getContracts() async {
+    final snapshot = await _firestore.collection('contracts').get();
+    final list = snapshot.docs.map((doc) => ContractModel.fromFirestore(doc)).toList();
+    list.sort((a, b) {
+      if (a.endDate == null) return 1;
+      if (b.endDate == null) return -1;
+      return a.endDate!.compareTo(b.endDate!);
+    });
+    return list;
+  }
+
+  /// Gets total contracts count
+  Future<int> getContractsCount() async {
+    try {
+      final aggregate = await _firestore.collection('contracts').count().get();
+      return aggregate.count ?? 0;
+    } catch (_) {
+      final snapshot = await _firestore.collection('contracts').get();
+      return snapshot.docs.length;
+    }
   }
 
   /// Gets user details by ID

@@ -1,0 +1,129 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ==========================================
+    // 🛡️ دالات مساعدة للأمان والتحقق من الهوية
+    // ==========================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && getUserData().role == 'admin';
+    }
+
+    function isTechnician() {
+      return isAuthenticated() && getUserData().role == 'technician';
+    }
+
+    // ==========================================
+    // 1. جدول المستخدمين (users)
+    // ==========================================
+    match /users/{userId} {
+      // القراءة: متاحة لأي مستخدم مسجل للدخول (لمعرفة الفنيين، وإرسال الإشعارات للإدارة)
+      allow read: if isAuthenticated();
+
+      // الإنشاء والحذف: صلاحية الإدارة فقط
+      allow create, delete: if isAdmin();
+
+      // التعديل:
+      // - الأدمن يعدل أي حساب
+      // - صاحب الحساب يعدل بياناته أو توكن الإشعارات (fcmToken)
+      // - المستأجر يحدث تقييم الفني (averageRating, totalRatings) عند تأكيد الصيانة
+      allow update: if isAdmin() 
+                    || isOwner(userId)
+                    || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['averageRating', 'totalRatings']));
+    }
+
+    // ==========================================
+    // 2. جدول طلبات الصيانة (tasks)
+    // ==========================================
+    match /tasks/{taskId} {
+      // القراءة:
+      // - الأدمن يرى كل الطلبات
+      // - المستأجر يرى طلبات شقته
+      // - الفني يرى الطلبات المسندة إليه
+      allow read: if isAdmin() 
+                  || (isAuthenticated() && resource.data.tenantId == request.auth.uid)
+                  || (isAuthenticated() && resource.data.technicianId == request.auth.uid);
+
+      // الإنشاء:
+      // - المستأجر ينشئ طلباً لشروطه الخاصة
+      // - أو الأدمن
+      allow create: if isAdmin() 
+                    || (isAuthenticated() && request.resource.data.tenantId == request.auth.uid);
+
+      // التعديل:
+      // - الأدمن يعدل كل شيء
+      // - الفني يحدث حالة الطلب وإثبات الإنجاز وملاحظاته
+      // - المستأجر يحدث التقييم والتعليق (rating/feedback)
+      allow update: if isAdmin() 
+                    || (isAuthenticated() && resource.data.technicianId == request.auth.uid)
+                    || (isAuthenticated() && resource.data.tenantId == request.auth.uid);
+
+      // الحذف والإلغاء:
+      // - الأدمن يحذف أي طلب
+      // - المستأجر يستطيع حذف / إلغاء طلب الصيانة الخاص به
+      allow delete: if isAdmin() 
+                    || (isAuthenticated() && resource.data.tenantId == request.auth.uid);
+
+      // محادثات ورسائل طلب الصيانة (task messages)
+      match /messages/{messageId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    // ==========================================
+    // 3. جدول المحادثات المباشرة مع الإدارة (direct_chats)
+    // ==========================================
+    match /direct_chats/{chatId} {
+      // الأدمن يرى ويكتب في كل المحادثات
+      // المستأجر يرى ويكتب في محادثته الخاصة فقط مع الإدارة
+      allow read, write: if isAdmin() || (isAuthenticated() && (chatId == request.auth.uid || chatId.matches('.*' + request.auth.uid + '.*')));
+
+      match /messages/{messageId} {
+        allow read, write: if isAdmin() || (isAuthenticated() && (chatId == request.auth.uid || chatId.matches('.*' + request.auth.uid + '.*')));
+      }
+    }
+
+    // ==========================================
+    // 4. جدول الإشعارات (notifications)
+    // ==========================================
+    match /notifications/{notificationId} {
+      // القراءة: صاحب الإشعار فقط أو الأدمن
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+
+      // الإنشاء: أي مستخدم مسجل يرسل إشعاراً (المستأجر يخطر الإدارة، الفني يخطر المستأجر، الإدارة ترسل تعميماً)
+      allow create: if isAuthenticated();
+
+      // التعديل (تحديد كمقروء isRead): صاحب الإشعار نفسه
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+
+      // الحذف: الأدمن أو صاحب الإشعار
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+    }
+
+    // ==========================================
+    // 5. جدول العقود (contracts)
+    // ==========================================
+    match /contracts/{contractId} {
+      // القراءة: الأدمن يرى كل العقود، والمستأجر يرى عقده الخاص فقط
+      allow read: if isAdmin() 
+                  || (isAuthenticated() && (resource.data.tenantUid == request.auth.uid || resource.data.mobileNumber == getUserData().phone));
+
+      // التعديل والإنشاء والحذف: للإدارة فقط
+      allow write: if isAdmin();
+    }
+  }
+}

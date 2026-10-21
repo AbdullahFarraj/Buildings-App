@@ -24,13 +24,7 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
   String? _error;
 
   String _selectedBuilding = 'All Buildings';
-  final List<String> _buildings = [
-    'All Buildings',
-    'Al nahda Building',
-    'Al barsha Building',
-    '77A Building',
-    'Al warsan #80 Building',
-  ];
+  List<String> _buildings = ['All Buildings'];
 
   @override
   void initState() {
@@ -52,8 +46,21 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
         _error = null;
       });
       final tenants = await _firestoreService.getTenants();
+      
+      // Extract unique building names dynamically from actual database records
+      final dynamicBuildings = tenants
+          .map((t) => t.buildingId)
+          .where((b) => b != null && b.trim().isNotEmpty)
+          .cast<String>()
+          .toSet()
+          .toList()..sort();
+
       setState(() {
         _allTenants = tenants;
+        _buildings = ['All Buildings', ...dynamicBuildings];
+        if (!_buildings.contains(_selectedBuilding)) {
+          _selectedBuilding = 'All Buildings';
+        }
         _isLoading = false;
       });
       _applyFilters();

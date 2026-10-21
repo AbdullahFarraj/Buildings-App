@@ -47,8 +47,8 @@ class UserModel {
       profession: map['profession'],
       averageRating: map['averageRating']?.toDouble(),
       totalRatings: map['totalRatings']?.toInt(),
-      contractStartDate: map['contractStartDate'] != null ? DateTime.parse(map['contractStartDate']) : null,
-      contractEndDate: map['contractEndDate'] != null ? DateTime.parse(map['contractEndDate']) : null,
+      contractStartDate: map['contractStartDate'] != null ? DateTime.parse(map['contractStartDate']).toLocal() : null,
+      contractEndDate: map['contractEndDate'] != null ? DateTime.parse(map['contractEndDate']).toLocal() : null,
       contractUrl: map['contractUrl'],
       documents: (map['documents'] as List<dynamic>?)
           ?.map((e) => Map<String, String>.from(e))

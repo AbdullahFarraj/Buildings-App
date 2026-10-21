@@ -265,7 +265,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
         ),
         const SizedBox(height: 4),
         Text(
-          date != null ? DateFormat('dd MMM yyyy').format(date) : 'Not Set',
+          date != null ? DateFormat('dd MMM yyyy').format(date.toLocal()) : 'Not Set',
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
       ],

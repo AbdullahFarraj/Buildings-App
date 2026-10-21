@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/firestore_service.dart';
@@ -29,7 +30,7 @@ class _CreateRequestViewState extends State<CreateRequestView> {
   String _selectedCategory = 'Plumbing';
   final List<String> _categories = ['Plumbing', 'Electrical', 'HVAC', 'Other'];
   
-  List<File> _imageFiles = [];
+  List<XFile> _imageFiles = [];
   bool _isSubmitting = false;
 
   DateTime? _selectedDate;
@@ -243,7 +244,15 @@ class _CreateRequestViewState extends State<CreateRequestView> {
                             ),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(12),
-                              child: Image.file(_imageFiles[index], fit: BoxFit.cover),
+                              child: kIsWeb
+                                  ? Image.network(
+                                      _imageFiles[index].path,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : Image.file(
+                                      File(_imageFiles[index].path),
+                                      fit: BoxFit.cover,
+                                    ),
                             ),
                           ),
                           Positioned(

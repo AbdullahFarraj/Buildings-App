@@ -4,9 +4,8 @@ import '../../models/maintenance_task_model.dart';
 import '../../models/user_model.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/enums/task_status.dart';
-import 'package:intl/intl.dart';
 import '../../services/notification_service.dart';
-import 'admin_dashboard_view.dart'; // to use _showAssignBottomSheet maybe? No, let's pass a callback if needed or use static methods.
+import 'admin_contracts_view.dart';
 
 class AdminOverviewTab extends StatefulWidget {
   final FirestoreService firestoreService;
@@ -28,6 +27,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
   List<UserModel> _technicians = [];
   List<MaintenanceTaskModel> _recentTasks = [];
   int _activeRequests = 0;
+  int _contractsCount = 0;
 
   @override
   void initState() {
@@ -36,26 +36,48 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
   }
 
   Future<void> _loadData() async {
+    List<UserModel> tenants = [];
+    List<UserModel> technicians = [];
+    int contractsCount = 0;
+    List<MaintenanceTaskModel> recentTasks = [];
+    int activeRequests = 0;
+
     try {
-      final tenants = await widget.firestoreService.getTenants();
-      final technicians = await widget.firestoreService.getTechnicians();
-      // For tasks we just want a snapshot of the latest
+      tenants = await widget.firestoreService.getTenants();
+    } catch (e) {
+      debugPrint('Error loading tenants: $e');
+    }
+
+    try {
+      technicians = await widget.firestoreService.getTechnicians();
+    } catch (e) {
+      debugPrint('Error loading technicians: $e');
+    }
+
+    try {
+      contractsCount = await widget.firestoreService.getContractsCount();
+    } catch (e) {
+      debugPrint('Error loading contracts count: $e');
+    }
+
+    try {
       final tasksStream = widget.firestoreService.getAllTasksForAdmin();
       final tasksList = await tasksStream.first;
-
-      if (mounted) {
-        setState(() {
-          _tenants = tenants;
-          _technicians = technicians;
-          _recentTasks = tasksList.take(5).toList(); // Show top 5 latest
-          _activeRequests = tasksList.where((t) => t.status != TaskStatus.completed).length;
-          _isLoading = false;
-        });
-      }
+      recentTasks = tasksList.take(5).toList();
+      activeRequests = tasksList.where((t) => t.status != TaskStatus.completed).length;
     } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      debugPrint('Error loading tasks: $e');
+    }
+
+    if (mounted) {
+      setState(() {
+        _tenants = tenants;
+        _technicians = technicians;
+        _contractsCount = contractsCount;
+        _recentTasks = recentTasks;
+        _activeRequests = activeRequests;
+        _isLoading = false;
+      });
     }
   }
 
@@ -112,13 +134,61 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
   }
 
   Widget _buildStatsGrid() {
-    return Row(
+    return Column(
       children: [
-        Expanded(child: _buildStatCard('Tenants', _tenants.length.toString(), Icons.group, AppColors.primary, onTap: () => widget.onNavigate(2))),
-        const SizedBox(width: 12),
-        Expanded(child: _buildStatCard('Active Tasks', _activeRequests.toString(), Icons.engineering, AppColors.accent, isDark: true, onTap: () => widget.onNavigate(1))),
-        const SizedBox(width: 12),
-        Expanded(child: _buildStatCard('Techs', _technicians.length.toString(), Icons.handyman, Colors.teal, onTap: () => widget.onNavigate(3))),
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                'Tenants',
+                _tenants.length.toString(),
+                Icons.group,
+                AppColors.primary,
+                onTap: () => widget.onNavigate(2),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildStatCard(
+                'Contracts',
+                _contractsCount.toString(),
+                Icons.assignment_outlined,
+                const Color(0xFF6C5CE7),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AdminContractsView()),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                'Active Tasks',
+                _activeRequests.toString(),
+                Icons.engineering,
+                AppColors.accent,
+                isDark: true,
+                onTap: () => widget.onNavigate(1),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildStatCard(
+                'Techs',
+                _technicians.length.toString(),
+                Icons.handyman,
+                Colors.teal,
+                onTap: () => widget.onNavigate(3),
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -178,6 +248,13 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
           child: Row(
             children: [
               _buildActionChip('Manage Tenants', Icons.manage_accounts, () => widget.onNavigate(2)),
+              const SizedBox(width: 12),
+              _buildActionChip('All Contracts', Icons.assignment_outlined, () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AdminContractsView()),
+                );
+              }),
               const SizedBox(width: 12),
               _buildActionChip('Manage Techs', Icons.engineering, () => widget.onNavigate(3)),
               const SizedBox(width: 12),

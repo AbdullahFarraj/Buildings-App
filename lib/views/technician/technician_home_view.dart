@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/firestore_service.dart';
 import '../../models/maintenance_task_model.dart';
@@ -58,7 +59,7 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
 
   void _showCompletionDialog(MaintenanceTaskModel task) {
     final TextEditingController notesController = TextEditingController();
-    File? _selectedImage;
+    XFile? _selectedImage;
 
     showModalBottomSheet(
       context: context,
@@ -93,7 +94,9 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: Image.file(_selectedImage!, height: 120, width: double.infinity, fit: BoxFit.cover),
+                          child: kIsWeb
+                              ? Image.network(_selectedImage!.path, height: 120, width: double.infinity, fit: BoxFit.cover)
+                              : Image.file(File(_selectedImage!.path), height: 120, width: double.infinity, fit: BoxFit.cover),
                         ),
                         Positioned(
                           right: 4,
