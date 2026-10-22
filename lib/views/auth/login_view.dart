@@ -36,7 +36,7 @@ class _LoginViewState extends State<LoginView> {
         try {
           final query = await FirebaseFirestore.instance
               .collection('users')
-              .where('phone', '==', cleanPhone)
+              .where('phone', isEqualTo: cleanPhone)
               .limit(1)
               .get();
           if (query.docs.isNotEmpty) {
