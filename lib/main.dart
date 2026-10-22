@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
-import 'views/auth/auth_wrapper.dart';
+import 'services/push_notification_service.dart';
 import 'views/admin/admin_dashboard_view.dart';
 import 'views/tenant/tenant_home_view.dart';
 import 'views/technician/technician_home_view.dart';
 import 'views/splash/splash_view.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -14,6 +16,8 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    await PushNotificationService.initialize();
   } catch (e) {
     debugPrint('Firebase init error (may need configuration): $e');
   }

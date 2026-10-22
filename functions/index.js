@@ -71,8 +71,9 @@ exports.sendPushNotification = functions.firestore
   .onCreate(async (snap, context) => {
     const notification = snap.data();
     const userId = notification.userId;
-    const title = notification.title;
-    const message = notification.message;
+    const title = notification.title || "Elite Living";
+    const message = notification.message || "";
+    const relatedTaskId = notification.relatedTaskId || "";
 
     if (!userId) {
       console.log('No user ID found in notification.');
@@ -98,16 +99,49 @@ exports.sendPushNotification = functions.firestore
       // Send Push Notification via FCM
       const payload = {
         notification: {
-          title: title || 'New Notification',
-          body: message || '',
+          title: title,
+          body: message,
+        },
+        data: {
+          title: String(title),
+          body: String(message),
+          relatedTaskId: String(relatedTaskId),
+          chatId: String(relatedTaskId),
+          userId: String(userId),
+          click_action: 'FLUTTER_NOTIFICATION_CLICK',
+        },
+        android: {
+          priority: 'high',
+          notification: {
+            channelId: 'high_importance_channel',
+            sound: 'default',
+            priority: 'max',
+            defaultSound: true,
+            defaultVibrateTimings: true,
+          },
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: 'default',
+              badge: 1,
+            },
+          },
         },
         token: fcmToken,
       };
 
       const response = await admin.messaging().send(payload);
-      console.log('Successfully sent push notification:', response);
+      console.log(`Successfully sent push notification to user ${userId}:`, response);
     } catch (error) {
-      console.error('Error sending push notification:', error);
+      if (error.code === 'messaging/registration-token-not-registered') {
+        console.log(`Token for user ${userId} expired. Cleaning up.`);
+        await admin.firestore().collection('users').doc(userId).update({
+          fcmToken: admin.firestore.FieldValue.delete()
+        });
+      } else {
+        console.error('Error sending push notification:', error);
+      }
     }
     return null;
   });

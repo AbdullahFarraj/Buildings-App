@@ -1,10 +1,9 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import '../../models/user_model.dart';
 import '../../core/enums/user_role.dart';
+import '../../services/push_notification_service.dart';
 import 'login_view.dart';
 import '../tenant/tenant_home_view.dart';
 import '../technician/technician_home_view.dart';
@@ -72,7 +71,7 @@ class AuthWrapper extends StatelessWidget {
             final userModel = UserModel.fromMap(userData, user.uid);
 
             // Fetch and update FCM token in background
-            _updateFCMToken(user.uid);
+            PushNotificationService.syncUserToken(user.uid);
 
             // Route based on role
             switch (userModel.role) {
@@ -87,41 +86,5 @@ class AuthWrapper extends StatelessWidget {
         );
       },
     );
-  }
-
-  Future<void> _updateFCMToken(String userId) async {
-    try {
-      FirebaseMessaging messaging = FirebaseMessaging.instance;
-      
-      // Request permission (Required for iOS)
-      NotificationSettings settings = await messaging.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-
-      if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-        // Get the token
-        String? token;
-        if (kIsWeb) {
-          // NOTE: Web Push Notifications require a VAPID key from Firebase Console
-          // Go to Project Settings -> Cloud Messaging -> Web configuration -> Generate Key Pair
-          token = await messaging.getToken(
-            vapidKey: 'BGnIO1ERLemsFNKnTY1llGzc4PC31FmTMM8WfeRn_WprktMZflSSNo1ZXKtLE_COANWPW7tJhOUZ9WBCYp1pZ9s', // Replace this!
-          );
-        } else {
-          token = await messaging.getToken();
-        }
-        
-        if (token != null) {
-          // Save the token to Firestore
-          await FirebaseFirestore.instance.collection('users').doc(userId).update({
-            'fcmToken': token,
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint('Error updating FCM token: $e');
-    }
   }
 }
