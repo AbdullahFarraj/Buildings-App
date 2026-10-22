@@ -27,7 +27,7 @@ class BuildingApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Building Maintenance',
+      title: 'EliteLivingre',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       home: const SplashView(),

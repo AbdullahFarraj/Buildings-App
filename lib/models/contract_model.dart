@@ -9,6 +9,7 @@ class ContractModel {
   final String unitType;
   final String tenantName;
   final String mobileNumber;
+  final String? customerEmail;
   final DateTime? startDate;
   final DateTime? endDate;
   final double rentAmount;
@@ -25,6 +26,7 @@ class ContractModel {
     required this.unitType,
     required this.tenantName,
     required this.mobileNumber,
+    this.customerEmail,
     this.startDate,
     this.endDate,
     required this.rentAmount,
@@ -54,6 +56,7 @@ class ContractModel {
       unitType: map['unitType'] ?? '',
       tenantName: map['tenantName'] ?? '',
       mobileNumber: map['mobileNumber'] ?? '',
+      customerEmail: map['customerEmail'] ?? map['email'],
       startDate: parseDate(map['startDate']),
       endDate: parseDate(map['endDate']),
       rentAmount: (map['rentAmount'] as num?)?.toDouble() ?? 0.0,

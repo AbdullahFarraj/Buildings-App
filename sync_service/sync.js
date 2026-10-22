@@ -80,39 +80,56 @@ function sanitizeUaeMobile(rawMobile) {
   return null;
 }
 
-// 4. Main Synchronization Flow
+// 4. Email Extractor & Sanitizer
+function extractValidEmail(rawEmail, fallbackPhone) {
+  if (rawEmail) {
+    const parts = rawEmail.toString().split(/[\/,;\s]+/);
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    for (const part of parts) {
+      const trimmed = part.trim().toLowerCase();
+      if (emailRegex.test(trimmed)) {
+        return trimmed;
+      }
+    }
+  }
+  return `${fallbackPhone}@elitelivingre.ae`;
+}
+
+// 5. Main Synchronization Flow
 async function runSync() {
   console.log('========================================================');
-  console.log('🚀 بدء مزامنة عقود الإيجار مع Firebase (دارك / العقاري)...');
+  console.log('🚀 بدء مزامنة عقود الإيجار مع Firebase (EliteLivingre / العقاري)...');
   console.log('========================================================');
 
   let pool;
   try {
-    console.log('⏳ جاري الاتصال بقاعدة بيانات SQL Server (ABDULLAH-LAP\\SQLEXPRESS)...');
+    console.log(`⏳ جاري الاتصال بقاعدة بيانات SQL Server (${SQL_SERVER})...`);
     pool = await new sql.ConnectionPool(sqlConfig).connect();
     console.log('✅ تم الاتصال بقاعدة البيانات بنجاح.');
 
     const query = `
       SELECT 
-          LTRIM(RTRIM(ContractNo))            AS contractCode,
-          Number                              AS contractNumber,
-          LTRIM(RTRIM(BuildingName))          AS buildingName,
-          LTRIM(RTRIM(FlatNo))                AS unitNumber,
-          LTRIM(RTRIM(ApartmentType))         AS unitType,
-          LTRIM(RTRIM(CustName))              AS tenantName,
-          LTRIM(RTRIM(CustomerMobile))        AS mobileNumber,
-          FromDate                            AS startDate,
-          ToDate                              AS endDate,
-          Rent                                AS rentAmount,
-          YearValue                           AS yearValue,
-          LTRIM(RTRIM(ContractState))         AS contractState
-      FROM vwLeaseApartment
-      WHERE LTRIM(RTRIM(ContractState)) = 'valid'
-        AND YEAR(ToDate) >= 2026
-      ORDER BY BuildingName, FlatNo;
+          LTRIM(RTRIM(v.ContractNo))            AS contractCode,
+          v.Number                              AS contractNumber,
+          LTRIM(RTRIM(v.BuildingName))          AS buildingName,
+          LTRIM(RTRIM(v.FlatNo))                AS unitNumber,
+          LTRIM(RTRIM(v.ApartmentType))         AS unitType,
+          LTRIM(RTRIM(v.CustName))              AS tenantName,
+          LTRIM(RTRIM(v.CustomerMobile))        AS mobileNumber,
+          LTRIM(RTRIM(c.EMail))                 AS customerEmail,
+          v.FromDate                            AS startDate,
+          v.ToDate                              AS endDate,
+          v.Rent                                AS rentAmount,
+          v.YearValue                           AS yearValue,
+          LTRIM(RTRIM(v.ContractState))         AS contractState
+      FROM vwLeaseApartment v
+      LEFT JOIN Customer c ON v.CustomerGuid = c.Guid
+      WHERE LTRIM(RTRIM(v.ContractState)) = 'valid'
+        AND YEAR(v.ToDate) >= 2026
+      ORDER BY v.BuildingName, v.FlatNo;
     `;
 
-    console.log('⏳ جاري استرجاع العقود النشطة لسنة 2026 وما بعدها...');
+    console.log('⏳ جاري استرجاع العقود النشطة مع الإيميلات الحقيقية لسنة 2026 وما بعدها...');
     const result = await pool.request().query(query);
     const rows = result.recordset;
     console.log(`📋 تم استرجاع ${rows.length} عقداً من قاعدة البيانات.`);
@@ -122,26 +139,16 @@ async function runSync() {
       return;
     }
 
-    // Clean up old contracts collection to avoid duplicates and ensure exact match
-    console.log('🧹 جاري تهيئة وتنظيف مجموعة العقود السابقة...');
-    const oldContracts = await db.collection('contracts').get();
-    if (!oldContracts.empty) {
-      let delBatch = db.batch();
-      let delOps = 0;
-      for (const d of oldContracts.docs) {
-        delBatch.delete(d.ref);
-        delOps++;
-        if (delOps >= 400) {
-          await delBatch.commit();
-          delBatch = db.batch();
-          delOps = 0;
-        }
-      }
-      if (delOps > 0) {
-        await delBatch.commit();
-      }
-      console.log(`🗑️ تم تنظيف ${oldContracts.docs.length} عقداً سابقاً.`);
+    // Pre-fetch all Firebase Auth users in 1 call for blazing-fast in-memory lookup
+    console.log('⏳ جاري تحميل حسابات المستخدمين من Firebase...');
+    const allUsersResult = await auth.listUsers(1000);
+    const userByPhone = new Map();
+    const userByEmail = new Map();
+    for (const u of allUsersResult.users) {
+      if (u.phoneNumber) userByPhone.set(u.phoneNumber, u);
+      if (u.email) userByEmail.set(u.email.toLowerCase(), u);
     }
+    console.log(`👤 تم العثور على ${allUsersResult.users.length} حساب موجود مسبقاً.`);
 
     let processedCount = 0;
     let skippedCount = 0;
@@ -162,6 +169,7 @@ async function runSync() {
       }
     }
 
+    console.log('⏳ جاري معالجة العقود وتحديث الحسابات...');
     for (const row of rows) {
       const sanitizedPhone = sanitizeUaeMobile(row.mobileNumber);
       if (!sanitizedPhone) {
@@ -172,8 +180,8 @@ async function runSync() {
       const tenantName = row.tenantName || 'مستأجر';
       const buildingName = row.buildingName || 'غير محدد';
       const unitNumber = row.unitNumber || '';
-      const email = `${sanitizedPhone}@dark.ae`;
-      const defaultPassword = `Dark@${sanitizedPhone.slice(-6)}`;
+      const email = extractValidEmail(row.customerEmail, sanitizedPhone);
+      const defaultPassword = sanitizedPhone; // الباسوورد هو رقم هاتف المستأجر
 
       // Timezone-safe date helpers (avoid UTC midnight shifting the day backwards)
       function toMiddayTimestamp(d) {
@@ -197,29 +205,60 @@ async function runSync() {
       const startIso = toCalendarIsoString(row.startDate);
       const endIso = toCalendarIsoString(row.endDate);
 
-      // 1. Create or get user in Firebase Authentication
+      // 1. Fast In-Memory Lookup & Auth Sync
       let uid;
       try {
-        const existingUser = await auth.getUserByEmail(email);
-        uid = existingUser.uid;
-        authExistingCount++;
-      } catch (err) {
-        if (err.code === 'auth/user-not-found') {
-          const newUser = await auth.createUser({
-            email: email,
-            password: defaultPassword,
-            displayName: tenantName,
-            phoneNumber: `+${sanitizedPhone}`
-          });
-          uid = newUser.uid;
-          authCreatedCount++;
-        } else if (err.code === 'auth/phone-number-already-exists') {
-          const userByPhone = await auth.getUserByPhoneNumber(`+${sanitizedPhone}`);
-          uid = userByPhone.uid;
+        const phoneKey = `+${sanitizedPhone}`;
+        const emailKey = email.toLowerCase();
+        let existingUser = userByPhone.get(phoneKey) || userByEmail.get(emailKey);
+
+        if (existingUser) {
+          uid = existingUser.uid;
+          const needsUpdate = existingUser.email !== email || 
+                              !existingUser.phoneNumber || 
+                              existingUser.displayName !== tenantName;
+          
+          if (needsUpdate) {
+            const updatePayload = {
+              displayName: tenantName,
+              password: defaultPassword
+            };
+            if (existingUser.email !== email) updatePayload.email = email;
+            if (!existingUser.phoneNumber) updatePayload.phoneNumber = phoneKey;
+            
+            await auth.updateUser(uid, updatePayload);
+          }
           authExistingCount++;
         } else {
-          console.warn(`⚠️ تعذر إنشاء حساب المستخدم في Auth للرقم ${sanitizedPhone}:`, err.message);
+          try {
+            const newUser = await auth.createUser({
+              email: email,
+              password: defaultPassword,
+              displayName: tenantName,
+              phoneNumber: phoneKey
+            });
+            uid = newUser.uid;
+            userByPhone.set(phoneKey, newUser);
+            userByEmail.set(emailKey, newUser);
+            authCreatedCount++;
+          } catch (createErr) {
+            if (createErr.code === 'auth/email-already-exists') {
+              const u = await auth.getUserByEmail(email);
+              uid = u.uid;
+              userByEmail.set(emailKey, u);
+              authExistingCount++;
+            } else if (createErr.code === 'auth/phone-number-already-exists') {
+              const u = await auth.getUserByPhoneNumber(phoneKey);
+              uid = u.uid;
+              userByPhone.set(phoneKey, u);
+              authExistingCount++;
+            } else {
+              throw createErr;
+            }
+          }
         }
+      } catch (err) {
+        console.warn(`⚠️ تعذر تحديث/إنشاء حساب Auth للرقم ${sanitizedPhone} (${email}):`, err.message);
       }
 
       // 2. Prepare Contract Document in `contracts`
@@ -236,6 +275,8 @@ async function runSync() {
         unitType: row.unitType || '',
         tenantName: tenantName,
         mobileNumber: sanitizedPhone,
+        customerEmail: email,
+        email: email,
         startDate: startTimestamp,
         endDate: endTimestamp,
         rentAmount: row.rentAmount || 0,

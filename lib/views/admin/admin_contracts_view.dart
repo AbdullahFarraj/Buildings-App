@@ -378,6 +378,25 @@ class _AdminContractsViewState extends State<AdminContractsView> {
                 ),
               ],
             ),
+            if (contract.customerEmail != null && contract.customerEmail!.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  const Icon(Icons.email_outlined, size: 16, color: AppColors.textHint),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      contract.customerEmail!,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
 
             const SizedBox(height: 12),
 
