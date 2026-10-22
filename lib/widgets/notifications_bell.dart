@@ -138,37 +138,41 @@ class NotificationsBell extends StatelessWidget {
           service.markAsRead(notification.id);
         }
         
-        if (notification.relatedTaskId != null && notification.title.contains('Chat')) {
-          final user = FirebaseAuth.instance.currentUser;
-          if (user != null) {
-            final userName = user.displayName ?? 'User'; // Or fetch from Firestore if needed
-            
-            // Extract the sender's name from title if possible
-            String chatTitle = 'Chat';
-            if (notification.title.contains('-')) {
-              chatTitle = notification.title.split('-').last.replaceAll('💬', '').trim();
-            } else if (notification.title.contains('from')) {
-              chatTitle = notification.title.split('from').last.replaceAll('💬', '').trim();
-            }
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          final userName = user.displayName ?? 'Tenant';
+          final targetChatId = (notification.relatedTaskId != null && notification.relatedTaskId!.isNotEmpty)
+              ? notification.relatedTaskId!
+              : user.uid;
 
-            // We need BuildContext context.
-            showModalBottomSheet(
-              context: context, // Note: We need context passed to this function
-              isScrollControlled: true,
-              backgroundColor: Colors.transparent,
-              builder: (ctx) => Padding(
-                padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-                child: ChatSheet(
-                  chatId: notification.relatedTaskId!,
-                  chatTitle: chatTitle,
-                  currentUserId: user.uid,
-                  currentUserName: userName, // Using displayName for simplicity here
-                  isDirectChat: true, // Assuming direct chat for these management notifications for now
-                  receiverIds: const [], // Admin doesn't need to specify receivers to reply to tenant, or we could pass tenant.uid
-                ),
-              ),
-            );
+          // Extract cleaner chat title
+          String chatTitle = 'Building Management';
+          if (notification.title.contains('-')) {
+            chatTitle = notification.title.split('-').last.replaceAll('💬', '').trim();
+          } else if (notification.title.contains('from')) {
+            chatTitle = notification.title.split('from').last.replaceAll('💬', '').trim();
           }
+
+          // Close notifications bottom sheet first
+          Navigator.of(context).pop();
+
+          // Open Chat Conversation
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (ctx) => Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+              child: ChatSheet(
+                chatId: targetChatId,
+                chatTitle: chatTitle,
+                currentUserId: user.uid,
+                currentUserName: userName,
+                isDirectChat: true,
+                receiverIds: const [],
+              ),
+            ),
+          );
         }
       },
       child: Container(

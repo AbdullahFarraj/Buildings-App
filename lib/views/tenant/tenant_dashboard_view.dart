@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../services/firestore_service.dart';
 import '../../models/user_model.dart';
 import '../../core/theme/app_colors.dart';
+import '../../utils/contact_helper.dart';
 import '../shared/chat_sheet.dart';
 
 class TenantDashboardView extends StatefulWidget {
@@ -76,38 +77,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
               const SizedBox(height: 32),
 
               // Property Details Card
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _buildSectionTitle('Property Details'),
-                  TextButton.icon(
-                    onPressed: () {
-                      showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        backgroundColor: Colors.transparent,
-                        builder: (context) => Padding(
-                          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-                          child: ChatSheet(
-                            chatId: user.uid, // Direct chat between tenant and administration
-                            chatTitle: 'Building Management',
-                            currentUserId: user.uid,
-                            currentUserName: user.name,
-                            isDirectChat: true,
-                            receiverIds: const [], // Admins listen to all chats or we could add admin IDs
-                          ),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.chat),
-                    label: const Text('Contact Management'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.primary,
-                      backgroundColor: AppColors.primaryLight.withOpacity(0.1),
-                    ),
-                  ),
-                ],
-              ),
+              _buildSectionTitle('Property Details'),
               const SizedBox(height: 12),
               Card(
                 elevation: 0,
@@ -149,6 +119,12 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                   ),
                 ),
               ),
+              const SizedBox(height: 28),
+
+              // Contact Management Card
+              _buildSectionTitle('Management & Support'),
+              const SizedBox(height: 12),
+              _buildContactManagementCard(user),
               const SizedBox(height: 32),
 
               // Lease & Contract Card
@@ -310,6 +286,231 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
           ),
         ),
       ],
+    );
+  }
+
+  void _openChat(UserModel user) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: ChatSheet(
+          chatId: user.uid,
+          chatTitle: 'Elite Living Management',
+          currentUserId: user.uid,
+          currentUserName: user.name,
+          isDirectChat: true,
+          receiverIds: const [],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContactManagementCard(UserModel user) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Top Header Banner
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: const BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.support_agent_rounded, color: AppColors.accent, size: 26),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Elite Living Management',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF10B981),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          const Text(
+                            'Support Team is Available',
+                            style: TextStyle(
+                              color: Color(0xFFCBD5E1),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Have questions regarding your lease, payments, or maintenance? Connect directly with our team.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Primary Action: Live In-App Chat
+                ElevatedButton.icon(
+                  onPressed: () => _openChat(user),
+                  icon: const Icon(Icons.forum_rounded, size: 20),
+                  label: const Text(
+                    'Live In-App Chat',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.accent,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Secondary Actions: WhatsApp & Email & Call
+                Row(
+                  children: [
+                    // WhatsApp Button
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          ContactHelper.launchWhatsApp(
+                            ContactHelper.supportPhone,
+                            text: 'Hello Elite Living Management, I am ${user.name} (Building: ${user.buildingId ?? 'N/A'}, Apt: ${user.apartmentId ?? 'N/A'}).',
+                          );
+                        },
+                        icon: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF25D366), size: 18),
+                        label: const Text(
+                          'WhatsApp',
+                          style: TextStyle(
+                            color: Color(0xFF25D366),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: const Color(0xFF25D366).withOpacity(0.5)),
+                          backgroundColor: const Color(0xFF25D366).withOpacity(0.06),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+
+                    // Email Button
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          ContactHelper.launchEmail(
+                            ContactHelper.supportEmail,
+                            subject: 'Inquiry from ${user.name} - Apt ${user.apartmentId ?? ''}',
+                            body: 'Dear Management,\n\nTenant: ${user.name}\nBuilding: ${user.buildingId ?? ''}\nApartment: ${user.apartmentId ?? ''}\n\nMessage:\n',
+                          );
+                        },
+                        icon: const Icon(Icons.email_outlined, color: Color(0xFF0284C7), size: 18),
+                        label: const Text(
+                          'Email',
+                          style: TextStyle(
+                            color: Color(0xFF0284C7),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: const Color(0xFF0284C7).withOpacity(0.5)),
+                          backgroundColor: const Color(0xFF0284C7).withOpacity(0.06),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+
+                    // Call Button
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          ContactHelper.launchCall(ContactHelper.supportPhone);
+                        },
+                        icon: const Icon(Icons.phone_in_talk_rounded, color: AppColors.primary, size: 18),
+                        label: const Text(
+                          'Call',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: AppColors.border),
+                          backgroundColor: AppColors.background,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
