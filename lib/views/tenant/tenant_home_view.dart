@@ -11,11 +11,12 @@ import '../../widgets/skeleton_loader.dart';
 import '../../widgets/status_badge.dart';
 import '../../core/enums/task_status.dart';
 import '../../core/theme/app_colors.dart';
-import '../../widgets/full_screen_image_viewer.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import '../../services/storage_service.dart';
 import '../../widgets/notifications_bell.dart';
+import '../../widgets/app_notification_toast.dart';
+import '../../widgets/task_photos_widget.dart';
 import 'tenant_profile_view.dart';
 import 'tenant_alerts_view.dart';
 import 'tenant_dashboard_view.dart';
@@ -78,70 +79,14 @@ class _TenantHomeViewState extends State<TenantHomeView> {
 
   void _showForegroundNotificationBanner(NotificationModel notification) {
     if (!mounted) return;
-
-    ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
-    ScaffoldMessenger.of(context).showMaterialBanner(
-      MaterialBanner(
-        elevation: 6,
-        backgroundColor: AppColors.primary,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: const BoxDecoration(
-            color: AppColors.accent,
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(Icons.notifications_active, color: AppColors.primary, size: 24),
-        ),
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              notification.title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 15,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              notification.message,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
-            ),
-          ],
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
-              TenantAlertsView.openNotificationDetails(context, notification, _notificationService);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accent,
-              foregroundColor: AppColors.primary,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: const Text('READ / قراءة', style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-          IconButton(
-            icon: const Icon(Icons.close, color: Colors.white70),
-            onPressed: () {
-              ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
-            },
-          ),
-        ],
-      ),
+    AppNotificationToast.show(
+      context,
+      title: notification.title,
+      message: notification.message,
+      onTap: () {
+        TenantAlertsView.openNotificationDetails(context, notification, _notificationService);
+      },
     );
-
-    Future.delayed(const Duration(seconds: 10), () {
-      if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
-      }
-    });
   }
 
   void _showCreateRequestSheet(BuildContext context) {
@@ -419,47 +364,7 @@ class _TenantHomeViewState extends State<TenantHomeView> {
                         ],
                       ),
                     ],
-                    if (task.photoUrls != null && task.photoUrls!.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        height: 60,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: task.photoUrls!.length,
-                          separatorBuilder: (context, index) => const SizedBox(width: 8),
-                          itemBuilder: (context, index) {
-                            return GestureDetector(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => FullScreenImageViewer(
-                                      imageUrls: task.photoUrls!,
-                                      initialIndex: index,
-                                    ),
-                                  ),
-                                );
-                              },
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Image.network(
-                                  task.photoUrls![index],
-                                  width: 60,
-                                  height: 60,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) => Container(
-                                    width: 60,
-                                    height: 60,
-                                    color: Colors.grey[300],
-                                    child: const Icon(Icons.error),
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
+                    TaskPhotosWidget(task: task),
                     if (task.status != TaskStatus.completed && task.status != TaskStatus.rejected) ...[
                       const SizedBox(height: 12),
                       const Divider(),

@@ -15,9 +15,10 @@ import '../../core/theme/app_colors.dart';
 import 'admin_tenants_view.dart';
 import 'admin_technicians_view.dart';
 import 'admin_inbox_view.dart';
-import '../../widgets/full_screen_image_viewer.dart';
 import 'admin_overview_tab.dart';
 import '../../widgets/notifications_bell.dart';
+import '../../widgets/app_notification_toast.dart';
+import '../../widgets/task_photos_widget.dart';
 import '../../utils/contact_helper.dart';
 import '../shared/chat_sheet.dart';
 
@@ -83,75 +84,19 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
 
   void _showForegroundNotificationBanner(NotificationModel notification) {
     if (!mounted) return;
-
-    ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
-    ScaffoldMessenger.of(context).showMaterialBanner(
-      MaterialBanner(
-        elevation: 6,
-        backgroundColor: AppColors.primary,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: const BoxDecoration(
-            color: AppColors.accent,
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(Icons.notifications_active, color: AppColors.primary, size: 24),
-        ),
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              notification.title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 15,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              notification.message,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
-            ),
-          ],
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
-              NotificationService().markAsRead(notification.id);
-              if (notification.title.contains('Chat') || notification.title.contains('Message')) {
-                setState(() => _selectedIndex = 4);
-              } else {
-                setState(() => _selectedIndex = 1);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accent,
-              foregroundColor: AppColors.primary,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: const Text('VIEW / عرض', style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-          IconButton(
-            icon: const Icon(Icons.close, color: Colors.white70),
-            onPressed: () {
-              ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
-            },
-          ),
-        ],
-      ),
+    AppNotificationToast.show(
+      context,
+      title: notification.title,
+      message: notification.message,
+      onTap: () {
+        NotificationService().markAsRead(notification.id);
+        if (notification.title.contains('Chat') || notification.title.contains('Message')) {
+          setState(() => _selectedIndex = 4);
+        } else {
+          setState(() => _selectedIndex = 1);
+        }
+      },
     );
-
-    Future.delayed(const Duration(seconds: 10), () {
-      if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
-      }
-    });
   }
 
   Future<void> _loadAdminData() async {
@@ -463,47 +408,7 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
                           ],
                         ),
                       ],
-                      if (task.photoUrls != null && task.photoUrls!.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          height: 60,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: task.photoUrls!.length,
-                            separatorBuilder: (context, index) => const SizedBox(width: 8),
-                            itemBuilder: (context, index) {
-                              return GestureDetector(
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => FullScreenImageViewer(
-                                        imageUrls: task.photoUrls!,
-                                        initialIndex: index,
-                                      ),
-                                    ),
-                                  );
-                                },
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Image.network(
-                                    task.photoUrls![index],
-                                    width: 60,
-                                    height: 60,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) => Container(
-                                      width: 60,
-                                      height: 60,
-                                      color: Colors.grey[300],
-                                      child: const Icon(Icons.error),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
+                      TaskPhotosWidget(task: task),
                       if (task.status == TaskStatus.pending || task.status == TaskStatus.assigned) ...[
                         const SizedBox(height: 12),
                         const Divider(),

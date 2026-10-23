@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -11,9 +12,11 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/storage_service.dart';
+import '../../services/notification_service.dart';
+import '../../models/notification_model.dart';
+import '../../widgets/app_notification_toast.dart';
+import '../../widgets/task_photos_widget.dart';
 import 'dart:io';
-import 'dart:io';
-import '../../widgets/full_screen_image_viewer.dart';
 import '../../widgets/notifications_bell.dart';
 import '../../utils/contact_helper.dart';
 import '../shared/chat_sheet.dart';
@@ -30,6 +33,51 @@ class TechnicianHomeView extends StatefulWidget {
 class _TechnicianHomeViewState extends State<TechnicianHomeView> {
   final FirestoreService _firestoreService = FirestoreService();
   final StorageService _storageService = StorageService();
+
+  StreamSubscription<List<NotificationModel>>? _notificationSub;
+  final Set<String> _seenNotificationIds = {};
+  bool _isInitialNotificationLoad = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _startForegroundNotificationListener();
+  }
+
+  @override
+  void dispose() {
+    _notificationSub?.cancel();
+    super.dispose();
+  }
+
+  void _startForegroundNotificationListener() {
+    _notificationSub = NotificationService().getUserNotifications(widget.technicianId).listen((notifications) {
+      if (_isInitialNotificationLoad) {
+        for (var n in notifications) {
+          _seenNotificationIds.add(n.id);
+        }
+        _isInitialNotificationLoad = false;
+        return;
+      }
+
+      for (var n in notifications) {
+        if (!_seenNotificationIds.contains(n.id)) {
+          _seenNotificationIds.add(n.id);
+          if (!n.isRead && mounted) {
+            AppNotificationToast.show(
+              context,
+              title: n.title,
+              message: n.message,
+              onTap: () {
+                NotificationService().markAsRead(n.id);
+              },
+            );
+            break;
+          }
+        }
+      }
+    });
+  }
 
   Future<void> _startWork(MaintenanceTaskModel task) async {
     await _firestoreService.updateTaskStatus(task.id, TaskStatus.inProgress);
@@ -349,47 +397,7 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
                         ),
                       ],
                       
-                      if (task.photoUrls != null && task.photoUrls!.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          height: 60,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: task.photoUrls!.length,
-                            separatorBuilder: (context, index) => const SizedBox(width: 8),
-                            itemBuilder: (context, index) {
-                              return GestureDetector(
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => FullScreenImageViewer(
-                                        imageUrls: task.photoUrls!,
-                                        initialIndex: index,
-                                      ),
-                                    ),
-                                  );
-                                },
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Image.network(
-                                    task.photoUrls![index],
-                                    width: 60,
-                                    height: 60,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) => Container(
-                                      width: 60,
-                                      height: 60,
-                                      color: Colors.grey[200],
-                                      child: const Icon(Icons.broken_image, color: Colors.grey),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
+                      TaskPhotosWidget(task: task),
 
                       // Actions
                       if (!isCompleted) ...[
