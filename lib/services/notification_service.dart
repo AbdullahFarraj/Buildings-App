@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/notification_model.dart';
-import '../models/user_model.dart';
 
 class NotificationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -104,20 +103,26 @@ class NotificationService {
     required String message,
     String? relatedTaskId,
   }) async {
-    final adminsSnapshot = await _firestore.collection('users').where('role', isEqualTo: 'admin').get();
-    final batch = _firestore.batch();
-    for (var doc in adminsSnapshot.docs) {
-      final docRef = _notificationsCollection.doc();
-      batch.set(docRef, {
-        'userId': doc.id,
-        'title': title,
-        'message': message,
-        'isRead': false,
-        'createdAt': FieldValue.serverTimestamp(),
-        'relatedTaskId': relatedTaskId,
-      });
+    try {
+      final adminsSnapshot = await _firestore.collection('users').where('role', isEqualTo: 'admin').get();
+      if (adminsSnapshot.docs.isEmpty) return;
+
+      final batch = _firestore.batch();
+      for (var doc in adminsSnapshot.docs) {
+        final docRef = _notificationsCollection.doc();
+        batch.set(docRef, {
+          'userId': doc.id,
+          'title': title,
+          'message': message,
+          'isRead': false,
+          'createdAt': FieldValue.serverTimestamp(),
+          'relatedTaskId': relatedTaskId,
+        });
+      }
+      await batch.commit();
+    } catch (e) {
+      // Don't let notification failure break parent operation
     }
-    await batch.commit();
   }
 
   /// Send contract expiry reminder

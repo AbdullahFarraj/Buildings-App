@@ -16,15 +16,17 @@ service cloud.firestore {
     }
 
     function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        : {};
     }
 
     function isAdmin() {
-      return isAuthenticated() && getUserData().role == 'admin';
+      return isAuthenticated() && getUserData().get('role', '') == 'admin';
     }
 
     function isTechnician() {
-      return isAuthenticated() && getUserData().role == 'technician';
+      return isAuthenticated() && getUserData().get('role', '') == 'technician';
     }
 
     // ==========================================
@@ -44,10 +46,10 @@ service cloud.firestore {
       // القراءة:
       // - المشرف يقرأ كل الحسابات
       // - صاحب الحساب يقرأ حسابه الشخصي فقط
-      // - أي مستخدم مسجل يستطيع قراءة بطاقات الفنيين فقط
+      // - أي مستخدم مسجل يستطيع قراءة بطاقات الفنيين والإدارة (للتواصل وإرسال الإشعارات)
       allow read: if isAdmin() 
                   || isOwner(userId) 
-                  || (isAuthenticated() && resource.data.role == 'technician');
+                  || (isAuthenticated() && (resource.data.role == 'technician' || resource.data.role == 'admin'));
 
       // الإنشاء والحذف: صلاحية الإدارة فقط
       allow create, delete: if isAdmin();
