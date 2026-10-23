@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import '../../services/firestore_service.dart';
+import '../../services/notification_service.dart';
+import '../../models/notification_model.dart';
 import '../../models/maintenance_task_model.dart';
 import '../../models/user_model.dart';
 import '../../widgets/skeleton_loader.dart';
@@ -31,8 +33,116 @@ class TenantHomeView extends StatefulWidget {
 
 class _TenantHomeViewState extends State<TenantHomeView> {
   final FirestoreService _firestoreService = FirestoreService();
+  final NotificationService _notificationService = NotificationService();
   
   int _selectedIndex = 0;
+  StreamSubscription<List<NotificationModel>>? _notificationSub;
+  final Set<String> _seenNotificationIds = {};
+  bool _isInitialNotificationLoad = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _startForegroundNotificationListener();
+  }
+
+  @override
+  void dispose() {
+    _notificationSub?.cancel();
+    super.dispose();
+  }
+
+  void _startForegroundNotificationListener() {
+    _notificationSub = _notificationService.getUserNotifications(widget.tenantId).listen((notifications) {
+      if (_isInitialNotificationLoad) {
+        // Record existing notifications on first load
+        for (var n in notifications) {
+          _seenNotificationIds.add(n.id);
+        }
+        _isInitialNotificationLoad = false;
+        return;
+      }
+
+      // Check for any newly arrived unread notification
+      for (var n in notifications) {
+        if (!_seenNotificationIds.contains(n.id)) {
+          _seenNotificationIds.add(n.id);
+          if (!n.isRead && mounted) {
+            _showForegroundNotificationBanner(n);
+            break;
+          }
+        }
+      }
+    });
+  }
+
+  void _showForegroundNotificationBanner(NotificationModel notification) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+    ScaffoldMessenger.of(context).showMaterialBanner(
+      MaterialBanner(
+        elevation: 6,
+        backgroundColor: AppColors.primary,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: const BoxDecoration(
+            color: AppColors.accent,
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.notifications_active, color: AppColors.primary, size: 24),
+        ),
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              notification.title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              notification.message,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+              TenantAlertsView.openNotificationDetails(context, notification, _notificationService);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accent,
+              foregroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('READ / قراءة', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, color: Colors.white70),
+            onPressed: () {
+              ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+            },
+          ),
+        ],
+      ),
+    );
+
+    Future.delayed(const Duration(seconds: 10), () {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+      }
+    });
+  }
 
   void _showCreateRequestSheet(BuildContext context) {
     showModalBottomSheet(

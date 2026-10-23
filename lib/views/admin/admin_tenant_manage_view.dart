@@ -199,6 +199,7 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
         'title': _alertTitleController.text,
         'message': _alertMessageController.text,
         'timestamp': FieldValue.serverTimestamp(),
+        'createdAt': FieldValue.serverTimestamp(),
         'isRead': false,
       });
       setState(() {

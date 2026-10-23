@@ -26,11 +26,17 @@ class NotificationModel {
       title: map['title'] ?? '',
       message: map['message'] ?? '',
       isRead: map['isRead'] ?? false,
-      createdAt: map['createdAt'] != null 
-          ? (map['createdAt'] as Timestamp).toDate() 
-          : DateTime.now(),
+      createdAt: _parseDate(map['createdAt'] ?? map['timestamp']),
       relatedTaskId: map['relatedTaskId'],
     );
+  }
+
+  static DateTime _parseDate(dynamic val) {
+    if (val == null) return DateTime.now();
+    if (val is Timestamp) return val.toDate();
+    if (val is DateTime) return val;
+    if (val is String) return DateTime.tryParse(val) ?? DateTime.now();
+    return DateTime.now();
   }
 
   Map<String, dynamic> toMap() {
