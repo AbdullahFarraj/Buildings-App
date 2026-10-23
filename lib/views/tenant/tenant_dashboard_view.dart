@@ -596,8 +596,8 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
 
   Future<void> _uploadTenantDocument(UserModel user) async {
     final platformFile = await FilePicker.pickFile(type: FileType.any);
-    if (platformFile != null) {
-      final nameController = TextEditingController(text: platformFile.name);
+    if (!mounted || platformFile == null) return;
+    final nameController = TextEditingController(text: platformFile.name);
 
       final confirm = await showDialog<bool>(
         context: context,

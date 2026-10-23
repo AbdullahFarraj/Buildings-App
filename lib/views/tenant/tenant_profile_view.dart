@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/firestore_service.dart';
 import '../../models/user_model.dart';
 import '../../core/theme/app_colors.dart';
@@ -109,13 +108,42 @@ class _TenantProfileViewState extends State<TenantProfileView> {
                           }
                           setStateDialog(() => isSubmitting = true);
                           try {
+                            final rawPhone = phoneController.text.trim();
+                            final digits = rawPhone.replaceAll(RegExp(r'\D'), '');
+                            String sanitized = digits;
+                            if (digits.startsWith('05') && digits.length == 10) {
+                              sanitized = '971${digits.substring(1)}';
+                            } else if (digits.startsWith('5') && digits.length == 9) {
+                              sanitized = '971$digits';
+                            }
+
                             await _firestoreService.updateUser(user.uid, {
                               'name': nameController.text.trim(),
-                              'phone': phoneController.text.trim(),
+                              'phone': sanitized.isNotEmpty ? sanitized : rawPhone,
                             });
-                            if (mounted) {
+
+                            if (user.email != null && user.email!.isNotEmpty && sanitized.isNotEmpty) {
+                              await FirebaseFirestore.instance
+                                  .collection('phone_index')
+                                  .doc(sanitized)
+                                  .set({'email': user.email}, SetOptions(merge: true));
+
+                              if (sanitized.startsWith('9715') && sanitized.length == 12) {
+                                final localPhone = '05${sanitized.substring(4)}';
+                                await FirebaseFirestore.instance
+                                    .collection('phone_index')
+                                    .doc(localPhone)
+                                    .set({'email': user.email}, SetOptions(merge: true));
+                              }
+                            }
+
+                            if (ctx.mounted) {
                               Navigator.pop(ctx);
-                              setState(() {}); // refresh FutureBuilder
+                            }
+                            if (mounted) {
+                              setState(() {
+                                _userFuture = _firestoreService.getUser(widget.tenantId);
+                              });
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated successfully')));
                             }
                           } catch (e) {
