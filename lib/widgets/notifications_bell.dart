@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/notification_service.dart';
+import '../services/firestore_service.dart';
 import '../models/notification_model.dart';
 import '../core/theme/app_colors.dart';
 import 'package:intl/intl.dart';
@@ -161,6 +162,23 @@ class NotificationsBell extends StatelessWidget {
               chatTitle = notification.title.split('from').last.replaceAll('💬', '').trim();
             }
 
+            bool isDirect = true;
+            final List<String> receivers = [];
+            if (notification.relatedTaskId != null && 
+                notification.relatedTaskId!.isNotEmpty && 
+                notification.relatedTaskId != user.uid) {
+              final task = await FirestoreService().getTask(notification.relatedTaskId!);
+              if (task != null) {
+                isDirect = false;
+                chatTitle = 'Task: ${task.title}';
+                if (task.technicianId != null && task.technicianId != user.uid) {
+                  receivers.add(task.technicianId!);
+                }
+              }
+            }
+
+            if (!context.mounted) return;
+
             showModalBottomSheet(
               context: context,
               isScrollControlled: true,
@@ -172,8 +190,8 @@ class NotificationsBell extends StatelessWidget {
                   chatTitle: chatTitle,
                   currentUserId: user.uid,
                   currentUserName: userName,
-                  isDirectChat: true,
-                  receiverIds: const [],
+                  isDirectChat: isDirect,
+                  receiverIds: receivers,
                 ),
               ),
             );

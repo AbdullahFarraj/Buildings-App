@@ -31,6 +31,17 @@ class FirestoreService {
     } catch (_) {}
   }
 
+  /// Get a single task by its ID
+  Future<MaintenanceTaskModel?> getTask(String taskId) async {
+    try {
+      final doc = await _tasksCollection.doc(taskId).get();
+      if (doc.exists && doc.data() != null) {
+        return MaintenanceTaskModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+      }
+    } catch (_) {}
+    return null;
+  }
+
   /// Gets a stream of tasks submitted by a specific tenant.
   Stream<List<MaintenanceTaskModel>> getTasksByTenant(String tenantId) {
     return _tasksCollection

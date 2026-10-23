@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/notification_model.dart';
 import '../../services/notification_service.dart';
+import '../../services/firestore_service.dart';
 import '../shared/chat_sheet.dart';
 
 class TenantAlertsView extends StatelessWidget {
@@ -347,7 +348,7 @@ class TenantAlertsView extends StatelessWidget {
           actions: [
             if (isChatNotification && user != null)
               ElevatedButton.icon(
-                onPressed: () {
+                onPressed: () async {
                   Navigator.pop(ctx);
                   final targetChatId = (notification.relatedTaskId != null && notification.relatedTaskId!.isNotEmpty)
                       ? notification.relatedTaskId!
@@ -357,6 +358,23 @@ class TenantAlertsView extends StatelessWidget {
                   if (notification.title.contains('-')) {
                     chatTitle = notification.title.split('-').last.replaceAll('💬', '').trim();
                   }
+
+                  bool isDirect = true;
+                  final List<String> receivers = [];
+                  if (notification.relatedTaskId != null && 
+                      notification.relatedTaskId!.isNotEmpty && 
+                      notification.relatedTaskId != user.uid) {
+                    final task = await FirestoreService().getTask(notification.relatedTaskId!);
+                    if (task != null) {
+                      isDirect = false;
+                      chatTitle = 'Task: ${task.title}';
+                      if (task.technicianId != null && task.technicianId != user.uid) {
+                        receivers.add(task.technicianId!);
+                      }
+                    }
+                  }
+
+                  if (!context.mounted) return;
 
                   showModalBottomSheet(
                     context: context,
@@ -369,8 +387,8 @@ class TenantAlertsView extends StatelessWidget {
                         chatTitle: chatTitle,
                         currentUserId: user.uid,
                         currentUserName: user.displayName ?? 'Tenant',
-                        isDirectChat: true,
-                        receiverIds: const [],
+                        isDirectChat: isDirect,
+                        receiverIds: receivers,
                       ),
                     ),
                   );

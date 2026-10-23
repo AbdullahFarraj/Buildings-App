@@ -50,21 +50,25 @@ class _ChatSheetState extends State<ChatSheet> {
   }
 
   Future<void> _initChat() async {
-    // Mark notifications as read for this chat
-    await NotificationService().markChatNotificationsAsRead(widget.currentUserId, widget.chatId);
-    
-    // Fetch tenant details if it's a direct chat
-    if (widget.isDirectChat) {
-      final userModel = await _firestoreService.getUser(widget.chatId);
-      if (userModel != null && mounted) {
-        setState(() {
-          if (userModel.role == UserRole.tenant) {
-            _headerSubtitle = '${userModel.buildingId ?? 'No Building'} - Apt ${userModel.apartmentId ?? 'N/A'}';
-          } else {
-            _headerSubtitle = userModel.role.name.toUpperCase();
-          }
-        });
+    try {
+      // Mark notifications as read for this chat
+      await NotificationService().markChatNotificationsAsRead(widget.currentUserId, widget.chatId);
+      
+      // Fetch tenant details if it's a direct chat
+      if (widget.isDirectChat) {
+        final userModel = await _firestoreService.getUser(widget.chatId);
+        if (userModel != null && mounted) {
+          setState(() {
+            if (userModel.role == UserRole.tenant) {
+              _headerSubtitle = '${userModel.buildingId ?? 'No Building'} - Apt ${userModel.apartmentId ?? 'N/A'}';
+            } else {
+              _headerSubtitle = userModel.role.name.toUpperCase();
+            }
+          });
+        }
       }
+    } catch (e) {
+      debugPrint('Error in _initChat: $e');
     }
   }
 
