@@ -725,7 +725,6 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
         }
       }
     }
-  }
 
   Widget _buildTenantProfileCard(UserModel user) {
     final phoneTrimmed = user.phone.trim();
