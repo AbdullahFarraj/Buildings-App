@@ -52,6 +52,17 @@ function sanitizeUaeMobile(rawMobile) {
 
   if (!digits) return null;
 
+  // Handle common typos where digit '1' in '971' was omitted:
+  // 975xxxxxxxx (11 digits) -> 9715xxxxxxxx (12 digits)
+  if (digits.startsWith('975') && digits.length === 11) {
+    digits = '9715' + digits.substring(3);
+  }
+
+  // 915xxxxxxxx (11 digits) -> 9715xxxxxxxx (12 digits)
+  if (digits.startsWith('915') && digits.length === 11) {
+    digits = '9715' + digits.substring(3);
+  }
+
   // Handle accidental 97105xxxxxxx -> 9715xxxxxxx
   if (digits.startsWith('97105') && digits.length === 13) {
     digits = '9715' + digits.substring(5);
@@ -81,7 +92,7 @@ function sanitizeUaeMobile(rawMobile) {
 }
 
 // 4. Email Extractor & Sanitizer
-function extractValidEmail(rawEmail, fallbackPhone) {
+function extractValidEmail(rawEmail, fallbackIdentifier) {
   if (rawEmail) {
     const parts = rawEmail.toString().split(/[\/,;\s]+/);
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -92,7 +103,8 @@ function extractValidEmail(rawEmail, fallbackPhone) {
       }
     }
   }
-  return `${fallbackPhone}@elitelivingre.ae`;
+  if (!fallbackIdentifier) return null;
+  return `${fallbackIdentifier}@elitelivingre.ae`;
 }
 
 // 5. Main Synchronization Flow
@@ -151,7 +163,6 @@ async function runSync() {
     console.log(`👤 تم العثور على ${allUsersResult.users.length} حساب موجود مسبقاً.`);
 
     let processedCount = 0;
-    let skippedCount = 0;
     let authCreatedCount = 0;
     let authExistingCount = 0;
 
@@ -172,16 +183,25 @@ async function runSync() {
     console.log('⏳ جاري معالجة العقود وتحديث الحسابات...');
     for (const row of rows) {
       const sanitizedPhone = sanitizeUaeMobile(row.mobileNumber);
-      if (!sanitizedPhone) {
-        skippedCount++;
-        continue;
-      }
-
       const tenantName = row.tenantName || 'مستأجر';
       const buildingName = row.buildingName || 'غير محدد';
       const unitNumber = row.unitNumber || '';
-      const email = extractValidEmail(row.customerEmail, sanitizedPhone);
-      const defaultPassword = sanitizedPhone; // الباسوورد هو رقم هاتف المستأجر
+
+      const safeContractCode = (row.contractCode || `${unitNumber}_${row.contractNumber || 'nocode'}`)
+        .toString()
+        .replace(/[\/\\#\s]/g, '_');
+
+      // Email resolution:
+      // 1. Real email if exists
+      // 2. If phone exists: phone@elitelivingre.ae
+      // 3. Fallback: contract-based email
+      let email = extractValidEmail(row.customerEmail, sanitizedPhone);
+      if (!email) {
+        email = `tenant_apt${unitNumber}_${safeContractCode.toLowerCase()}@elitelivingre.ae`;
+      }
+
+      // Default password: phone if available, else Elite@123456
+      const defaultPassword = sanitizedPhone || 'Elite@123456';
 
       // Timezone-safe date helpers (avoid UTC midnight shifting the day backwards)
       function toMiddayTimestamp(d) {
@@ -208,14 +228,14 @@ async function runSync() {
       // 1. Fast In-Memory Lookup & Auth Sync
       let uid;
       try {
-        const phoneKey = `+${sanitizedPhone}`;
+        const phoneKey = sanitizedPhone ? `+${sanitizedPhone}` : null;
         const emailKey = email.toLowerCase();
-        let existingUser = userByPhone.get(phoneKey) || userByEmail.get(emailKey);
+        let existingUser = (phoneKey ? userByPhone.get(phoneKey) : null) || userByEmail.get(emailKey);
 
         if (existingUser) {
           uid = existingUser.uid;
           const needsUpdate = existingUser.email !== email || 
-                              !existingUser.phoneNumber || 
+                              (phoneKey && !existingUser.phoneNumber) || 
                               existingUser.displayName !== tenantName;
           
           if (needsUpdate) {
@@ -224,21 +244,24 @@ async function runSync() {
               password: defaultPassword
             };
             if (existingUser.email !== email) updatePayload.email = email;
-            if (!existingUser.phoneNumber) updatePayload.phoneNumber = phoneKey;
+            if (phoneKey && !existingUser.phoneNumber) updatePayload.phoneNumber = phoneKey;
             
             await auth.updateUser(uid, updatePayload);
           }
           authExistingCount++;
         } else {
           try {
-            const newUser = await auth.createUser({
+            const createPayload = {
               email: email,
               password: defaultPassword,
-              displayName: tenantName,
-              phoneNumber: phoneKey
-            });
+              displayName: tenantName
+            };
+            if (phoneKey) {
+              createPayload.phoneNumber = phoneKey;
+            }
+            const newUser = await auth.createUser(createPayload);
             uid = newUser.uid;
-            userByPhone.set(phoneKey, newUser);
+            if (phoneKey) userByPhone.set(phoneKey, newUser);
             userByEmail.set(emailKey, newUser);
             authCreatedCount++;
           } catch (createErr) {
@@ -247,25 +270,22 @@ async function runSync() {
               uid = u.uid;
               userByEmail.set(emailKey, u);
               authExistingCount++;
-            } else if (createErr.code === 'auth/phone-number-already-exists') {
+            } else if (phoneKey && createErr.code === 'auth/phone-number-already-exists') {
               const u = await auth.getUserByPhoneNumber(phoneKey);
               uid = u.uid;
               userByPhone.set(phoneKey, u);
               authExistingCount++;
             } else {
-              throw createErr;
+              console.warn(`⚠️ تعذر إنشاء حساب Auth لـ (${email}):`, createErr.message);
             }
           }
         }
       } catch (err) {
-        console.warn(`⚠️ تعذر تحديث/إنشاء حساب Auth للرقم ${sanitizedPhone} (${email}):`, err.message);
+        console.warn(`⚠️ خطأ في معالجة Auth لـ (${email}):`, err.message);
       }
 
       // 2. Prepare Contract Document in `contracts`
-      const safeContractCode = (row.contractCode || `${row.unitNumber}_${row.contractNumber || ''}`)
-        .toString()
-        .replace(/[\/\\#\s]/g, '_');
-      const contractDocId = `${sanitizedPhone}_${safeContractCode}`;
+      const contractDocId = sanitizedPhone ? `${sanitizedPhone}_${safeContractCode}` : `contract_${safeContractCode}`;
       const contractRef = db.collection('contracts').doc(contractDocId);
       const contractData = {
         contractCode: row.contractCode || '',
@@ -274,7 +294,7 @@ async function runSync() {
         unitNumber: unitNumber,
         unitType: row.unitType || '',
         tenantName: tenantName,
-        mobileNumber: sanitizedPhone,
+        mobileNumber: sanitizedPhone || (row.mobileNumber ? String(row.mobileNumber).trim() : ''),
         customerEmail: email,
         email: email,
         startDate: startTimestamp,
@@ -288,28 +308,29 @@ async function runSync() {
       currentBatch.set(contractRef, contractData, { merge: true });
       currentBatchOps++;
 
-      // 3. Prepare User Document in `users/{uid}` so Flutter App & Admin display it immediately!
-      if (uid) {
-        const userRef = db.collection('users').doc(uid);
-        const userData = {
-          name: tenantName,
-          phone: sanitizedPhone,
-          email: email,
-          role: 'tenant',
-          apartmentId: unitNumber,
-          buildingId: buildingName,
-          contractStartDate: startIso,
-          contractEndDate: endIso,
-          contractCode: row.contractCode || '',
-          rentAmount: row.rentAmount || 0,
-          yearValue: row.yearValue || 0,
-          unitType: row.unitType || '',
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        };
-        currentBatch.set(userRef, userData, { merge: true });
-        currentBatchOps++;
+      // 3. Prepare User Document in `users/{uid || fallbackDocId}`
+      const userDocId = uid || `tenant_${safeContractCode}`;
+      const userRef = db.collection('users').doc(userDocId);
+      const userData = {
+        name: tenantName,
+        phone: sanitizedPhone || (row.mobileNumber ? String(row.mobileNumber).trim() : ''),
+        email: email,
+        role: 'tenant',
+        apartmentId: unitNumber,
+        buildingId: buildingName,
+        contractStartDate: startIso,
+        contractEndDate: endIso,
+        contractCode: row.contractCode || '',
+        rentAmount: row.rentAmount || 0,
+        yearValue: row.yearValue || 0,
+        unitType: row.unitType || '',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+      currentBatch.set(userRef, userData, { merge: true });
+      currentBatchOps++;
 
-        // 4. Set phone_index mapping for secure, fast login by phone
+      // 4. Set phone_index mapping for secure, fast login by phone
+      if (sanitizedPhone) {
         const phoneIndexRef = db.collection('phone_index').doc(sanitizedPhone);
         currentBatch.set(phoneIndexRef, { email: email }, { merge: true });
         currentBatchOps++;
@@ -335,7 +356,6 @@ async function runSync() {
     console.log(`✔️ إجمالي العقود المعالجة والمرفوعة: ${processedCount}`);
     console.log(`👤 حسابات مستأجرين جديدة تم إنشاؤها: ${authCreatedCount}`);
     console.log(`🔄 حسابات مستأجرين تم تحديثها: ${authExistingCount}`);
-    console.log(`⚠️ عقود تم استبعادها (رقم هاتف غير إماراتي/غير صالح): ${skippedCount}`);
     console.log('========================================================');
 
   } catch (error) {

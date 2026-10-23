@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:uuid/uuid.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/firestore_service.dart';
 import '../../services/notification_service.dart';
 import '../../models/user_model.dart';
@@ -126,6 +127,12 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                   ),
                 ),
               ),
+              const SizedBox(height: 28),
+
+              // Tenant Profile & Phone Card
+              _buildSectionTitle('Tenant Profile & Phone'),
+              const SizedBox(height: 12),
+              _buildTenantProfileCard(user),
               const SizedBox(height: 28),
 
               // Contact Management Card
@@ -718,5 +725,291 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
         }
       }
     }
+  }
+
+  Widget _buildTenantProfileCard(UserModel user) {
+    final phoneTrimmed = user.phone.trim();
+    final bool hasValidPhone = phoneTrimmed.isNotEmpty &&
+        (phoneTrimmed.startsWith('05') ||
+            phoneTrimmed.startsWith('9715') ||
+            phoneTrimmed.startsWith('+9715'));
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: hasValidPhone ? AppColors.border : Colors.amber.shade400,
+          width: hasValidPhone ? 1 : 1.5,
+        ),
+      ),
+      color: hasValidPhone ? Colors.white : Colors.amber.shade50.withOpacity(0.5),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: hasValidPhone
+                        ? AppColors.primary.withOpacity(0.1)
+                        : Colors.amber.shade100,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    hasValidPhone ? Icons.phone_android : Icons.phone_missed,
+                    color: hasValidPhone ? AppColors.primary : Colors.amber.shade800,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Registered Phone Number',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        phoneTrimmed.isNotEmpty ? phoneTrimmed : 'No phone number registered',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: hasValidPhone ? AppColors.textPrimary : Colors.amber.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => _showEditPhoneDialog(user),
+                  icon: Icon(
+                    phoneTrimmed.isEmpty ? Icons.add_circle_outline : Icons.edit_outlined,
+                    size: 18,
+                    color: AppColors.primary,
+                  ),
+                  label: Text(
+                    phoneTrimmed.isEmpty ? 'Add Phone' : 'Update',
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    backgroundColor: AppColors.primaryLight.withOpacity(0.15),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ],
+            ),
+            if (!hasValidPhone) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade100.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 16, color: Colors.amber.shade900),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Add your mobile number so you can log in directly using your phone instead of email.',
+                        style: TextStyle(fontSize: 12, color: Colors.amber.shade900),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (user.email != null && user.email!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Divider(height: 1),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Icon(Icons.email_outlined, size: 16, color: AppColors.textSecondary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Account Email: ${user.email}',
+                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditPhoneDialog(UserModel user) {
+    final phoneController = TextEditingController(text: user.phone);
+    String? errorMessage;
+    bool isSaving = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.phone_android, color: AppColors.primary),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      user.phone.trim().isEmpty ? 'Add Phone Number' : 'Update Phone Number',
+                      style: const TextStyle(fontSize: 18),
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Enter your UAE mobile number (e.g., 05xxxxxxxx or 9715xxxxxxxx). This phone will be linked to your account for fast mobile login.',
+                    style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: InputDecoration(
+                      labelText: 'UAE Mobile Number',
+                      hintText: '05xxxxxxxx or 9715xxxxxxxx',
+                      prefixIcon: const Icon(Icons.dialpad),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      errorText: errorMessage,
+                    ),
+                  ),
+                  if (isSaving) ...[
+                    const SizedBox(height: 16),
+                    const Center(child: CircularProgressIndicator()),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSaving ? null : () => Navigator.pop(dialogCtx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          final raw = phoneController.text.trim();
+                          final digits = raw.replaceAll(RegExp(r'\D'), '');
+
+                          String sanitized = '';
+                          if (digits.startsWith('05') && digits.length == 10) {
+                            sanitized = '971${digits.substring(1)}';
+                          } else if (digits.startsWith('5') && digits.length == 9) {
+                            sanitized = '971$digits';
+                          } else if (digits.startsWith('9715') && digits.length == 12) {
+                            sanitized = digits;
+                          } else if (digits.startsWith('009715') && digits.length == 14) {
+                            sanitized = digits.substring(2);
+                          } else {
+                            setDialogState(() {
+                              errorMessage =
+                                  'Invalid UAE number. Must start with 05 (10 digits) or 9715 (12 digits).';
+                            });
+                            return;
+                          }
+
+                          setDialogState(() {
+                            isSaving = true;
+                            errorMessage = null;
+                          });
+
+                          try {
+                            // 1. Update user document in Firestore
+                            await FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(user.uid)
+                                .update({'phone': sanitized});
+
+                            // 2. Update phone_index mappings so login works immediately!
+                            if (user.email != null && user.email!.isNotEmpty) {
+                              final email = user.email!.trim().toLowerCase();
+                              await FirebaseFirestore.instance
+                                  .collection('phone_index')
+                                  .doc(sanitized)
+                                  .set({'email': email}, SetOptions(merge: true));
+
+                              final localPhone = '05${sanitized.substring(4)}';
+                              await FirebaseFirestore.instance
+                                  .collection('phone_index')
+                                  .doc(localPhone)
+                                  .set({'email': email}, SetOptions(merge: true));
+                            }
+
+                            // 3. Update contract documents if any exist for this tenant
+                            final contractSnap = await FirebaseFirestore.instance
+                                .collection('contracts')
+                                .where('tenantUid', isEqualTo: user.uid)
+                                .get();
+                            for (var doc in contractSnap.docs) {
+                              await doc.reference.update({'mobileNumber': sanitized});
+                            }
+
+                            if (dialogCtx.mounted) {
+                              Navigator.pop(dialogCtx);
+                            }
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  backgroundColor: Colors.green.shade700,
+                                  content: Text('Phone number updated successfully to $sanitized!'),
+                                ),
+                              );
+                              setState(() {
+                                _userFuture = _firestoreService.getUser(widget.tenantId);
+                              });
+                            }
+                          } catch (e) {
+                            setDialogState(() {
+                              isSaving = false;
+                              errorMessage = 'Error saving phone number: $e';
+                            });
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 }
