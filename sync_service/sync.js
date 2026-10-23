@@ -308,6 +308,18 @@ async function runSync() {
         };
         currentBatch.set(userRef, userData, { merge: true });
         currentBatchOps++;
+
+        // 4. Set phone_index mapping for secure, fast login by phone
+        const phoneIndexRef = db.collection('phone_index').doc(sanitizedPhone);
+        currentBatch.set(phoneIndexRef, { email: email }, { merge: true });
+        currentBatchOps++;
+
+        if (sanitizedPhone.startsWith('9715') && sanitizedPhone.length === 12) {
+          const localPhone = '05' + sanitizedPhone.substring(4);
+          const localIndexRef = db.collection('phone_index').doc(localPhone);
+          currentBatch.set(localIndexRef, { email: email }, { merge: true });
+          currentBatchOps++;
+        }
       }
 
       processedCount++;

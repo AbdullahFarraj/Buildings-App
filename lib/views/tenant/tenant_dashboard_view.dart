@@ -1,7 +1,13 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:uuid/uuid.dart';
 import '../../services/firestore_service.dart';
+import '../../services/notification_service.dart';
 import '../../models/user_model.dart';
 import '../../core/theme/app_colors.dart';
 import '../../utils/contact_helper.dart';
@@ -19,6 +25,7 @@ class TenantDashboardView extends StatefulWidget {
 class _TenantDashboardViewState extends State<TenantDashboardView> {
   final FirestoreService _firestoreService = FirestoreService();
   late Future<UserModel?> _userFuture;
+  bool _isUploadingDoc = false;
 
   @override
   void initState() {
@@ -173,46 +180,27 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
               ),
               const SizedBox(height: 32),
 
-              // Other Documents
-              if (user.documents != null && user.documents!.isNotEmpty) ...[
-                _buildSectionTitle('Additional Documents'),
-                const SizedBox(height: 12),
-                Card(
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: const BorderSide(color: AppColors.border, width: 1),
+              // Additional Documents
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _buildSectionTitle('Additional Documents'),
+                  TextButton.icon(
+                    onPressed: _isUploadingDoc ? null : () => _uploadTenantDocument(user),
+                    icon: _isUploadingDoc 
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.upload_file_rounded, size: 18),
+                    label: Text(_isUploadingDoc ? 'Uploading...' : 'Upload File'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      backgroundColor: AppColors.primaryLight.withOpacity(0.1),
+                    ),
                   ),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: user.documents!.length,
-                    separatorBuilder: (context, index) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final doc = user.documents![index];
-                      return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                        leading: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryLight.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(Icons.description, color: AppColors.primary),
-                        ),
-                        title: Text(
-                          doc['name'] ?? 'Document',
-                          style: const TextStyle(fontWeight: FontWeight.w500),
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.download_rounded, color: AppColors.primary),
-                          onPressed: () => _launchUrl(doc['url']!),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
+                ],
+              ),
+              const SizedBox(height: 12),
+              _buildDocumentsCard(user),
+              const SizedBox(height: 24),
             ],
           ),
         );
@@ -512,5 +500,223 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
         ],
       ),
     );
+  }
+
+  Widget _buildDocumentsCard(UserModel user) {
+    final docs = user.documents ?? [];
+    if (docs.isEmpty) {
+      return Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.border, width: 1),
+        ),
+        color: AppColors.background,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+          child: Column(
+            children: [
+              const Icon(Icons.folder_open_rounded, size: 40, color: AppColors.textHint),
+              const SizedBox(height: 8),
+              const Text(
+                'No additional documents yet',
+                style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'You can upload your Emirates ID, Passport, or payment slips for management review.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _isUploadingDoc ? null : () => _uploadTenantDocument(user),
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Upload Your First Document'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.primary),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: AppColors.border, width: 1),
+      ),
+      child: ListView.separated(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: docs.length,
+        separatorBuilder: (context, index) => const Divider(height: 1),
+        itemBuilder: (context, index) {
+          final doc = docs[index];
+          return ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.description, color: AppColors.primary),
+            ),
+            title: Text(
+              doc['name'] ?? 'Document',
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+            subtitle: doc['uploadedAt'] != null 
+                ? Text(
+                    'Uploaded ${DateFormat('dd MMM yyyy').format(DateTime.tryParse(doc['uploadedAt']!) ?? DateTime.now())}',
+                    style: const TextStyle(fontSize: 11, color: AppColors.textHint),
+                  )
+                : null,
+            trailing: IconButton(
+              icon: const Icon(Icons.download_rounded, color: AppColors.primary),
+              onPressed: () => _launchUrl(doc['url']!),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _uploadTenantDocument(UserModel user) async {
+    final platformFile = await FilePicker.pickFile(type: FileType.any);
+    if (platformFile != null) {
+      final nameController = TextEditingController(text: platformFile.name);
+
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Text('Document Name', style: TextStyle(fontWeight: FontWeight.bold)),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Choose a quick name or type a custom one:', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: nameController,
+                      decoration: InputDecoration(
+                        hintText: 'e.g. Emirates ID',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        ActionChip(
+                          label: const Text('Emirates ID', style: TextStyle(fontSize: 12)),
+                          onPressed: () => setDialogState(() => nameController.text = 'Emirates ID'),
+                        ),
+                        ActionChip(
+                          label: const Text('Passport', style: TextStyle(fontSize: 12)),
+                          onPressed: () => setDialogState(() => nameController.text = 'Passport Copy'),
+                        ),
+                        ActionChip(
+                          label: const Text('Ejari', style: TextStyle(fontSize: 12)),
+                          onPressed: () => setDialogState(() => nameController.text = 'Ejari Certificate'),
+                        ),
+                        ActionChip(
+                          label: const Text('Payment Receipt', style: TextStyle(fontSize: 12)),
+                          onPressed: () => setDialogState(() => nameController.text = 'Payment Receipt'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Upload'),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+
+      if (confirm == true && nameController.text.trim().isNotEmpty) {
+        setState(() => _isUploadingDoc = true);
+        try {
+          final ext = platformFile.extension ?? 'pdf';
+          final fileName = '${const Uuid().v4()}.$ext';
+          final storagePath = 'documents/${user.uid}/$fileName';
+          final ref = FirebaseStorage.instance.ref().child(storagePath);
+
+          UploadTask uploadTask;
+          if (kIsWeb) {
+            final bytes = await platformFile.readAsBytes();
+            uploadTask = ref.putData(bytes);
+          } else if (platformFile.path != null) {
+            uploadTask = ref.putFile(File(platformFile.path!));
+          } else {
+            final bytes = await platformFile.readAsBytes();
+            uploadTask = ref.putData(bytes);
+          }
+
+          final snapshot = await uploadTask;
+          final downloadUrl = await snapshot.ref.getDownloadURL();
+
+          final currentDocs = List<Map<String, String>>.from(user.documents ?? []);
+          currentDocs.add({
+            'name': nameController.text.trim(),
+            'url': downloadUrl,
+            'uploadedAt': DateTime.now().toIso8601String(),
+          });
+
+          await _firestoreService.updateUser(user.uid, {'documents': currentDocs});
+
+          // Notify Admins
+          await NotificationService().notifyAdmins(
+            title: 'New Tenant Document 📄',
+            message: '${user.name} (Apt ${user.apartmentId ?? 'N/A'}) uploaded: ${nameController.text.trim()}',
+            relatedTaskId: user.uid,
+          );
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Document uploaded successfully!')),
+            );
+            setState(() {
+              _userFuture = _firestoreService.getUser(widget.tenantId);
+            });
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to upload document: $e')),
+            );
+          }
+        } finally {
+          if (mounted) {
+            setState(() => _isUploadingDoc = false);
+          }
+        }
+      }
+    }
   }
 }

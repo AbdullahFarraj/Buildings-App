@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -65,24 +66,35 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
     }
   }
 
-  Future<String?> _uploadFile(File file, String path) async {
+  Future<String?> _uploadPlatformFile(PlatformFile platformFile, String path) async {
     try {
       final ref = FirebaseStorage.instance.ref().child(path);
-      final uploadTask = await ref.putFile(file);
-      return await uploadTask.ref.getDownloadURL();
+      UploadTask uploadTask;
+      if (kIsWeb) {
+        final bytes = await platformFile.readAsBytes();
+        uploadTask = ref.putData(bytes);
+      } else if (platformFile.path != null) {
+        uploadTask = ref.putFile(File(platformFile.path!));
+      } else {
+        final bytes = await platformFile.readAsBytes();
+        uploadTask = ref.putData(bytes);
+      }
+      final snapshot = await uploadTask;
+      return await snapshot.ref.getDownloadURL();
     } catch (e) {
+      debugPrint('Error uploading file: $e');
       return null;
     }
   }
 
   Future<void> _uploadContract() async {
-    final result = await FilePicker.pickFiles(type: FileType.any);
-    if (result != null && result.isNotEmpty && result.first.path != null) {
+    final platformFile = await FilePicker.pickFile(type: FileType.any);
+    if (platformFile != null) {
       setState(() => _isLoading = true);
-      final file = File(result.first.path!);
-      final fileName = 'contract_${const Uuid().v4()}.${result.first.extension}';
+      final ext = platformFile.extension ?? 'pdf';
+      final fileName = 'contract_${const Uuid().v4()}.$ext';
       
-      final url = await _uploadFile(file, 'contracts/${_tenant.uid}/$fileName');
+      final url = await _uploadPlatformFile(platformFile, 'contracts/${_tenant.uid}/$fileName');
       
       if (url != null) {
         final updatedTenant = _tenant.copyWith(contractUrl: url);
@@ -100,10 +112,10 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
   }
 
   Future<void> _uploadOtherDocument() async {
-    final result = await FilePicker.pickFiles(type: FileType.any);
-    if (result != null && result.isNotEmpty && result.first.path != null) {
+    final platformFile = await FilePicker.pickFile(type: FileType.any);
+    if (platformFile != null) {
       // Ask for document name
-      final nameController = TextEditingController(text: result.first.name);
+      final nameController = TextEditingController(text: platformFile.name);
       final confirm = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -121,10 +133,10 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
 
       if (confirm == true && nameController.text.isNotEmpty) {
         setState(() => _isLoading = true);
-        final file = File(result.first.path!);
-        final fileName = '${const Uuid().v4()}.${result.first.extension}';
+        final ext = platformFile.extension ?? 'pdf';
+        final fileName = '${const Uuid().v4()}.$ext';
         
-        final url = await _uploadFile(file, 'documents/${_tenant.uid}/$fileName');
+        final url = await _uploadPlatformFile(platformFile, 'documents/${_tenant.uid}/$fileName');
         
         if (url != null) {
           final newDoc = {'name': nameController.text, 'url': url};

@@ -27,25 +27,38 @@ class _LoginViewState extends State<LoginView> {
       // If user typed a phone number instead of an email, look up their email
       if (!emailInput.contains('@')) {
         String cleanPhone = emailInput.replaceAll(RegExp(r'\D'), '');
+        String fullPhone = cleanPhone;
         if (cleanPhone.startsWith('05') && cleanPhone.length == 10) {
-          cleanPhone = '971${cleanPhone.substring(1)}';
+          fullPhone = '971${cleanPhone.substring(1)}';
         } else if (cleanPhone.startsWith('5') && cleanPhone.length == 9) {
-          cleanPhone = '971$cleanPhone';
+          fullPhone = '971$cleanPhone';
         }
 
         try {
-          final query = await FirebaseFirestore.instance
-              .collection('users')
-              .where('phone', isEqualTo: cleanPhone)
-              .limit(1)
+          // 1. Try phone_index lookup first (safe, public, unauthenticated)
+          final phoneDoc = await FirebaseFirestore.instance
+              .collection('phone_index')
+              .doc(fullPhone)
               .get();
-          if (query.docs.isNotEmpty) {
-            final docEmail = query.docs.first.data()['email'];
-            if (docEmail != null && docEmail.toString().isNotEmpty) {
-              emailInput = docEmail.toString().trim();
+          
+          if (phoneDoc.exists && phoneDoc.data()?['email'] != null) {
+            emailInput = phoneDoc.data()!['email'].toString().trim();
+          } else {
+            // Check by original typed phone (e.g. 05...)
+            final localDoc = await FirebaseFirestore.instance
+                .collection('phone_index')
+                .doc(cleanPhone)
+                .get();
+            if (localDoc.exists && localDoc.data()?['email'] != null) {
+              emailInput = localDoc.data()!['email'].toString().trim();
+            } else {
+              // 2. Fallback to standard generated email format
+              emailInput = 'tenant_$fullPhone@elitelivingre.ae';
             }
           }
-        } catch (_) {}
+        } catch (_) {
+          emailInput = 'tenant_$fullPhone@elitelivingre.ae';
+        }
       }
 
       try {
