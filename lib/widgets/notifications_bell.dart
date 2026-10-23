@@ -5,6 +5,7 @@ import '../models/notification_model.dart';
 import '../core/theme/app_colors.dart';
 import 'package:intl/intl.dart';
 import '../views/shared/chat_sheet.dart';
+import '../views/tenant/tenant_alerts_view.dart';
 
 class NotificationsBell extends StatelessWidget {
   const NotificationsBell({super.key});
@@ -140,39 +141,46 @@ class NotificationsBell extends StatelessWidget {
         
         final user = FirebaseAuth.instance.currentUser;
         if (user != null) {
-          final userName = user.displayName ?? 'Tenant';
+          final userName = user.displayName ?? 'User';
           final targetChatId = (notification.relatedTaskId != null && notification.relatedTaskId!.isNotEmpty)
               ? notification.relatedTaskId!
               : user.uid;
 
-          // Extract cleaner chat title
-          String chatTitle = 'Building Management';
-          if (notification.title.contains('-')) {
-            chatTitle = notification.title.split('-').last.replaceAll('💬', '').trim();
-          } else if (notification.title.contains('from')) {
-            chatTitle = notification.title.split('from').last.replaceAll('💬', '').trim();
-          }
+          final isChat = notification.title.contains('💬') || 
+                         notification.title.toLowerCase().contains('chat') ||
+                         notification.title.toLowerCase().contains('message');
 
           // Close notifications bottom sheet first
           Navigator.of(context).pop();
 
-          // Open Chat Conversation
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            backgroundColor: Colors.transparent,
-            builder: (ctx) => Padding(
-              padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-              child: ChatSheet(
-                chatId: targetChatId,
-                chatTitle: chatTitle,
-                currentUserId: user.uid,
-                currentUserName: userName,
-                isDirectChat: true,
-                receiverIds: const [],
+          if (isChat) {
+            String chatTitle = 'Building Management';
+            if (notification.title.contains('-')) {
+              chatTitle = notification.title.split('-').last.replaceAll('💬', '').trim();
+            } else if (notification.title.contains('from')) {
+              chatTitle = notification.title.split('from').last.replaceAll('💬', '').trim();
+            }
+
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (ctx) => Padding(
+                padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+                child: ChatSheet(
+                  chatId: targetChatId,
+                  chatTitle: chatTitle,
+                  currentUserId: user.uid,
+                  currentUserName: userName,
+                  isDirectChat: true,
+                  receiverIds: const [],
+                ),
               ),
-            ),
-          );
+            );
+          } else {
+            // General announcement, task update, or document notification
+            TenantAlertsView.openNotificationDetails(context, notification, service);
+          }
         }
       },
       child: Container(
