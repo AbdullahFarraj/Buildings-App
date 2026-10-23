@@ -22,15 +22,13 @@ class FirestoreService {
     await docRef.set(task.toMap());
 
     // Notify Admins
-    final adminSnapshot = await _firestore.collection('users').where('role', isEqualTo: UserRole.admin.value).get();
-    for (var doc in adminSnapshot.docs) {
-      await NotificationService().sendNotification(
-        userId: doc.id,
+    try {
+      await NotificationService().notifyAdmins(
         title: 'New Maintenance Request 🔔',
         message: 'A new request "${task.title}" was submitted for Apt ${task.apartmentNumber}.',
         relatedTaskId: docRef.id,
       );
-    }
+    } catch (_) {}
   }
 
   /// Gets a stream of tasks submitted by a specific tenant.

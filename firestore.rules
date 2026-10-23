@@ -43,13 +43,8 @@ service cloud.firestore {
     // 1. جدول المستخدمين (users)
     // ==========================================
     match /users/{userId} {
-      // القراءة:
-      // - المشرف يقرأ كل الحسابات
-      // - صاحب الحساب يقرأ حسابه الشخصي فقط
-      // - أي مستخدم مسجل يستطيع قراءة بطاقات الفنيين والإدارة (للتواصل وإرسال الإشعارات)
-      allow read: if isAdmin() 
-                  || isOwner(userId) 
-                  || (isAuthenticated() && (resource.data.role == 'technician' || resource.data.role == 'admin'));
+      // القراءة: متاحة لأي مستخدم مسجل بالتطبيق (لتمكين الاستعلام عن المشرفين والفنيين والتواصل)
+      allow read: if isAuthenticated();
 
       // الإنشاء والحذف: صلاحية الإدارة فقط
       allow create, delete: if isAdmin();
