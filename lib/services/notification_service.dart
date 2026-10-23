@@ -97,7 +97,6 @@ class NotificationService {
     await batch.commit();
   }
 
-  /// Send a notification to all admins
   Future<void> notifyAdmins({
     required String title,
     required String message,
@@ -105,7 +104,10 @@ class NotificationService {
   }) async {
     try {
       final adminsSnapshot = await _firestore.collection('users').where('role', isEqualTo: 'admin').get();
-      if (adminsSnapshot.docs.isEmpty) return;
+      if (adminsSnapshot.docs.isEmpty) {
+        // Fallback: search without role filter if needed or log
+        return;
+      }
 
       final batch = _firestore.batch();
       for (var doc in adminsSnapshot.docs) {
@@ -115,7 +117,7 @@ class NotificationService {
           'title': title,
           'message': message,
           'isRead': false,
-          'createdAt': FieldValue.serverTimestamp(),
+          'createdAt': Timestamp.now(),
           'relatedTaskId': relatedTaskId,
         });
       }

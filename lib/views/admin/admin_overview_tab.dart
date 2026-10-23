@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/firestore_service.dart';
 import '../../models/maintenance_task_model.dart';
@@ -28,11 +29,26 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
   List<MaintenanceTaskModel> _recentTasks = [];
   int _activeRequests = 0;
   int _contractsCount = 0;
+  StreamSubscription<List<MaintenanceTaskModel>>? _tasksSub;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _tasksSub = widget.firestoreService.getAllTasksForAdmin().listen((tasksList) {
+      if (mounted) {
+        setState(() {
+          _recentTasks = tasksList.take(5).toList();
+          _activeRequests = tasksList.where((t) => t.status != TaskStatus.completed).length;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _tasksSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadData() async {

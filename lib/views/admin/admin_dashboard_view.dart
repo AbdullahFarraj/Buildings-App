@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
@@ -38,10 +39,119 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
   UserModel? _adminUser;
   bool _isLoadingUser = true;
 
+  StreamSubscription<List<NotificationModel>>? _notificationSub;
+  final Set<String> _seenNotificationIds = {};
+  bool _isInitialNotificationLoad = true;
+
   @override
   void initState() {
     super.initState();
     _loadAdminData();
+    _startForegroundNotificationListener();
+  }
+
+  @override
+  void dispose() {
+    _notificationSub?.cancel();
+    super.dispose();
+  }
+
+  void _startForegroundNotificationListener() {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    _notificationSub = NotificationService().getUserNotifications(uid).listen((notifications) {
+      if (_isInitialNotificationLoad) {
+        for (var n in notifications) {
+          _seenNotificationIds.add(n.id);
+        }
+        _isInitialNotificationLoad = false;
+        return;
+      }
+
+      for (var n in notifications) {
+        if (!_seenNotificationIds.contains(n.id)) {
+          _seenNotificationIds.add(n.id);
+          if (!n.isRead && mounted) {
+            _showForegroundNotificationBanner(n);
+            break;
+          }
+        }
+      }
+    });
+  }
+
+  void _showForegroundNotificationBanner(NotificationModel notification) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+    ScaffoldMessenger.of(context).showMaterialBanner(
+      MaterialBanner(
+        elevation: 6,
+        backgroundColor: AppColors.primary,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: const BoxDecoration(
+            color: AppColors.accent,
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.notifications_active, color: AppColors.primary, size: 24),
+        ),
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              notification.title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              notification.message,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+              NotificationService().markAsRead(notification.id);
+              if (notification.title.contains('Chat') || notification.title.contains('Message')) {
+                setState(() => _selectedIndex = 4);
+              } else {
+                setState(() => _selectedIndex = 1);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accent,
+              foregroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('VIEW / عرض', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, color: Colors.white70),
+            onPressed: () {
+              ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+            },
+          ),
+        ],
+      ),
+    );
+
+    Future.delayed(const Duration(seconds: 10), () {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+      }
+    });
   }
 
   Future<void> _loadAdminData() async {
@@ -568,8 +678,19 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
             icon: Icon(Icons.dashboard),
             label: 'Overview',
           ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.build),
+          BottomNavigationBarItem(
+            icon: StreamBuilder<List<MaintenanceTaskModel>>(
+              stream: _firestoreService.getAllTasksForAdmin(),
+              builder: (context, snapshot) {
+                final tasks = snapshot.data ?? [];
+                final pendingCount = tasks.where((t) => t.status == TaskStatus.pending).length;
+                return Badge(
+                  isLabelVisible: pendingCount > 0,
+                  label: Text(pendingCount.toString()),
+                  child: const Icon(Icons.build),
+                );
+              },
+            ),
             label: 'Requests',
           ),
           const BottomNavigationBarItem(
