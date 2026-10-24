@@ -84,49 +84,85 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
               ),
               const SizedBox(height: 32),
 
-              // Property Details Card
-              _buildSectionTitle('Property Details'),
-              const SizedBox(height: 12),
-              Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: const BorderSide(color: AppColors.border, width: 1),
-                ),
-                color: AppColors.primaryLight.withOpacity(0.1),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
+              // Property Details
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _buildSectionTitle('Property Details'),
+                  if (user.allProperties.length > 1)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                      ),
+                      child: Text(
+                        '${user.allProperties.length} Properties Rented',
+                        style: const TextStyle(
                           color: AppColors.primary,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.apartment, color: AppColors.accent, size: 32),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Building: ${user.buildingId ?? 'Not Set'}',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Apartment: ${user.apartmentId ?? 'Not Set'}',
-                              style: const TextStyle(color: AppColors.textSecondary),
-                            ),
-                          ],
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
                         ),
                       ),
-                    ],
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ...user.allProperties.map((prop) => Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Card(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: const BorderSide(color: AppColors.border, width: 1),
+                  ),
+                  color: AppColors.primaryLight.withValues(alpha: 0.1),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.apartment, color: AppColors.accent, size: 32),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Building: ${prop.buildingName}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Apartment: ${prop.unitNumber} ${prop.unitType != null && prop.unitType!.isNotEmpty ? "(${prop.unitType})" : ""}',
+                                style: const TextStyle(color: AppColors.textSecondary),
+                              ),
+                              if (prop.rentAmount != null && prop.rentAmount! > 0) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Rent: ${prop.rentAmount!.toStringAsFixed(0)} AED / yr',
+                                  style: TextStyle(
+                                    color: Colors.green.shade700,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
+              )),
               const SizedBox(height: 28),
 
               // Tenant Profile & Phone Card

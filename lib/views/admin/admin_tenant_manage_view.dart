@@ -229,6 +229,41 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Rented Properties
+                Row(
+                  children: [
+                    const Text('Rented Properties', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${_tenant.allProperties.length}',
+                        style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ..._tenant.allProperties.map((p) => Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: const CircleAvatar(
+                      backgroundColor: AppColors.primary,
+                      child: Icon(Icons.apartment, color: AppColors.accent, size: 20),
+                    ),
+                    title: Text(p.buildingName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text('Unit: ${p.unitNumber} ${p.unitType != null ? "(${p.unitType})" : ""}'),
+                    trailing: p.rentAmount != null && p.rentAmount! > 0
+                        ? Text('${p.rentAmount!.toStringAsFixed(0)} AED', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green))
+                        : null,
+                  ),
+                )),
+                const SizedBox(height: 20),
+
                 // Contract Details
                 const Text('Contract Details', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
                 const SizedBox(height: 16),

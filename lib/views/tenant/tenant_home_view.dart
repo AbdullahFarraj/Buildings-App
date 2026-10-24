@@ -531,6 +531,7 @@ class _CreateRequestFormSheetState extends State<CreateRequestFormSheet> {
   bool _isSubmitting = false;
   bool _isLoadingUser = true;
   UserModel? _currentUser;
+  TenantProperty? _selectedProperty;
   
   List<XFile> _imageFiles = [];
   final StorageService _storageService = StorageService();
@@ -591,6 +592,9 @@ class _CreateRequestFormSheetState extends State<CreateRequestFormSheet> {
         setState(() {
           _currentUser = user;
           _isLoadingUser = false;
+          if (user != null && user.allProperties.isNotEmpty) {
+            _selectedProperty = user.allProperties.first;
+          }
         });
       }
     } catch (e) {
@@ -623,11 +627,14 @@ class _CreateRequestFormSheetState extends State<CreateRequestFormSheet> {
         photoUrls = await _storageService.uploadTaskPhotos(_imageFiles, widget.tenantId);
       }
 
+      final targetProperty = _selectedProperty ??
+          (_currentUser?.allProperties.isNotEmpty == true ? _currentUser!.allProperties.first : null);
+
       final task = MaintenanceTaskModel(
         id: '', 
         tenantId: widget.tenantId,
-        apartmentNumber: _currentUser!.apartmentId ?? 'Unknown',
-        buildingId: _currentUser!.buildingId,
+        apartmentNumber: targetProperty?.unitNumber ?? _currentUser!.apartmentId ?? 'Unknown',
+        buildingId: targetProperty?.buildingName ?? _currentUser!.buildingId,
         title: '$_selectedCategory Issue',
         description: _descController.text,
         category: _selectedCategory,
@@ -697,29 +704,48 @@ class _CreateRequestFormSheetState extends State<CreateRequestFormSheet> {
               ),
             ),
             const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.border),
+            if (_currentUser!.allProperties.length > 1) ...[
+              DropdownButtonFormField<TenantProperty>(
+                value: _selectedProperty,
+                decoration: const InputDecoration(
+                  labelText: 'Select Property / Unit',
+                  prefixIcon: Icon(Icons.apartment, color: AppColors.primary),
+                ),
+                items: _currentUser!.allProperties.map((p) {
+                  return DropdownMenuItem<TenantProperty>(
+                    value: p,
+                    child: Text('${p.buildingName} - Apt ${p.unitNumber}'),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  if (val != null) setState(() => _selectedProperty = val);
+                },
               ),
-              child: Row(
-                children: [
-                  const Icon(Icons.location_on, color: AppColors.primary),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'For: $bldDisplay, Apt $aptDisplay',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
+              const SizedBox(height: 16),
+            ] else
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.location_on, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'For: $bldDisplay, Apt $aptDisplay',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
             const SizedBox(height: 24),
             DropdownButtonFormField<String>(
               value: _selectedCategory,

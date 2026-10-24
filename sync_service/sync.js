@@ -138,7 +138,7 @@ async function runSync() {
       LEFT JOIN Customer c ON v.CustomerGuid = c.Guid
       WHERE LTRIM(RTRIM(v.ContractState)) = 'valid'
         AND YEAR(v.ToDate) >= 2026
-      ORDER BY v.BuildingName, v.FlatNo;
+      ORDER BY v.CustName, v.BuildingName, v.FlatNo;
     `;
 
     console.log('⏳ جاري استرجاع العقود النشطة مع الإيميلات الحقيقية لسنة 2026 وما بعدها...');
@@ -151,16 +151,53 @@ async function runSync() {
       return;
     }
 
+    // Date & Timezone conversion helpers
+    function toMiddayTimestamp(d) {
+      if (!d) return null;
+      const dt = new Date(d);
+      const midday = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 12, 0, 0);
+      return admin.firestore.Timestamp.fromDate(midday);
+    }
+
+    function toCalendarIsoString(d) {
+      if (!d) return null;
+      const dt = new Date(d);
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const day = String(dt.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}T00:00:00.000`;
+    }
+
+    function normalizeTenantName(name) {
+      if (!name) return 'مستأجر غير معروف';
+      return name.toString().trim().replace(/\s+/g, ' ');
+    }
+
     // Pre-fetch all Firebase Auth users in 1 call for blazing-fast in-memory lookup
     console.log('⏳ جاري تحميل حسابات المستخدمين من Firebase...');
     const allUsersResult = await auth.listUsers(1000);
     const userByPhone = new Map();
     const userByEmail = new Map();
+    const userByName = new Map();
+
     for (const u of allUsersResult.users) {
       if (u.phoneNumber) userByPhone.set(u.phoneNumber, u);
       if (u.email) userByEmail.set(u.email.toLowerCase(), u);
+      if (u.displayName) userByName.set(normalizeTenantName(u.displayName).toLowerCase(), u);
     }
-    console.log(`👤 تم العثور على ${allUsersResult.users.length} حساب موجود مسبقاً.`);
+
+    // Pre-fetch existing Firestore users to map Name -> UID
+    const firestoreUsersSnap = await db.collection('users').get();
+    for (const doc of firestoreUsersSnap.docs) {
+      const data = doc.data();
+      if (data.name) {
+        const norm = normalizeTenantName(data.name).toLowerCase();
+        if (!userByName.has(norm)) {
+          userByName.set(norm, { uid: doc.id, ...data });
+        }
+      }
+    }
+    console.log(`👤 تم العثور على ${allUsersResult.users.length} حساب Auth و ${firestoreUsersSnap.size} مستخدم في Firestore.`);
 
     let processedCount = 0;
     let authCreatedCount = 0;
@@ -180,73 +217,107 @@ async function runSync() {
       }
     }
 
-    console.log('⏳ جاري معالجة العقود وتحديث الحسابات...');
+    // Group rows by Normalized Tenant Name
+    console.log('⏳ جاري تجميع كافة العقود حسب اسم المستأجر (Name Grouping)...');
+    const tenantGroups = new Map();
     for (const row of rows) {
-      const sanitizedPhone = sanitizeUaeMobile(row.mobileNumber);
-      const tenantName = row.tenantName || 'مستأجر';
-      const buildingName = row.buildingName || 'غير محدد';
-      const unitNumber = row.unitNumber || '';
+      const normName = normalizeTenantName(row.tenantName);
+      if (!tenantGroups.has(normName)) {
+        tenantGroups.set(normName, {
+          name: normName,
+          contracts: [],
+          rawMobiles: [],
+          customerEmails: []
+        });
+      }
+      const group = tenantGroups.get(normName);
+      group.contracts.push(row);
+      if (row.mobileNumber) group.rawMobiles.push(row.mobileNumber);
+      if (row.customerEmail) group.customerEmails.push(row.customerEmail);
+    }
+    console.log(`👥 تم العثور على ${tenantGroups.size} مستأجر فريد من أصل ${rows.length} عقداً نشطاً.`);
 
-      const safeContractCode = (row.contractCode || `${unitNumber}_${row.contractNumber || 'nocode'}`)
-        .toString()
-        .replace(/[\/\\#\s]/g, '_');
+    console.log('⏳ جاري معالجة العقود، ربط العقارات بالحسابات، وتحديث الفايربيس...');
+    for (const group of tenantGroups.values()) {
+      // 1. Gather all unique valid UAE mobile numbers for this tenant
+      const validMobiles = [];
+      for (const rawM of group.rawMobiles) {
+        const sanitized = sanitizeUaeMobile(rawM);
+        if (sanitized && !validMobiles.includes(sanitized)) {
+          validMobiles.push(sanitized);
+        }
+      }
+      const primaryMobile = validMobiles[0] || null;
+      const rawPhone = group.rawMobiles.find(m => m && String(m).trim().length > 0) || '';
 
-      // Email resolution:
-      // 1. Real email if exists
-      // 2. If phone exists: phone@elitelivingre.ae
-      // 3. Fallback: contract-based email
-      let email = extractValidEmail(row.customerEmail, sanitizedPhone);
+      // 2. Resolve email (prefer real customer email, then phone@elitelivingre.ae, then slug)
+      let email = null;
+      for (const rawEmail of group.customerEmails) {
+        const parsed = extractValidEmail(rawEmail, primaryMobile);
+        if (parsed && !parsed.includes('nocode')) {
+          email = parsed;
+          break;
+        }
+      }
       if (!email) {
-        email = `tenant_apt${unitNumber}_${safeContractCode.toLowerCase()}@elitelivingre.ae`;
+        if (primaryMobile) {
+          email = `${primaryMobile}@elitelivingre.ae`;
+        } else {
+          const nameHash = Buffer.from(group.name).toString('hex').substring(0, 12);
+          email = `tenant_${nameHash}@elitelivingre.ae`;
+        }
       }
 
       // Default password: phone if available, else Elite@123456
-      const defaultPassword = sanitizedPhone || 'Elite@123456';
+      const defaultPassword = primaryMobile || 'Elite@123456';
 
-      // Timezone-safe date helpers (avoid UTC midnight shifting the day backwards)
-      function toMiddayTimestamp(d) {
-        if (!d) return null;
-        const dt = new Date(d);
-        const midday = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 12, 0, 0);
-        return admin.firestore.Timestamp.fromDate(midday);
-      }
+      // 3. Build properties list for this tenant
+      const properties = group.contracts.map(c => {
+        const safeCode = (c.contractCode || `${c.unitNumber}_${c.contractNumber || 'nocode'}`)
+          .toString()
+          .replace(/[\/\\#\s]/g, '_');
+        return {
+          buildingName: (c.buildingName || 'غير محدد').trim(),
+          unitNumber: (c.unitNumber || '').trim(),
+          unitType: (c.unitType || '').trim(),
+          contractCode: (c.contractCode || '').trim(),
+          contractNumber: c.contractNumber || null,
+          startDate: toCalendarIsoString(c.startDate),
+          endDate: toCalendarIsoString(c.endDate),
+          rentAmount: c.rentAmount || 0,
+          yearValue: c.yearValue || 0,
+          contractState: c.contractState || 'valid',
+        };
+      });
 
-      function toCalendarIsoString(d) {
-        if (!d) return null;
-        const dt = new Date(d);
-        const y = dt.getFullYear();
-        const m = String(dt.getMonth() + 1).padStart(2, '0');
-        const day = String(dt.getDate()).padStart(2, '0');
-        return `${y}-${m}-${day}T00:00:00.000`;
-      }
-
-      const startTimestamp = toMiddayTimestamp(row.startDate);
-      const endTimestamp = toMiddayTimestamp(row.endDate);
-      const startIso = toCalendarIsoString(row.startDate);
-      const endIso = toCalendarIsoString(row.endDate);
-
-      // 1. Fast In-Memory Lookup & Auth Sync
+      // 4. In-Memory Lookup & Auth Sync (Priority: Name -> Phone -> Email)
       let uid;
-      try {
-        const phoneKey = sanitizedPhone ? `+${sanitizedPhone}` : null;
-        const emailKey = email.toLowerCase();
-        let existingUser = (phoneKey ? userByPhone.get(phoneKey) : null) || userByEmail.get(emailKey);
+      const nameKey = group.name.toLowerCase();
+      const phoneKey = primaryMobile ? `+${primaryMobile}` : null;
+      const emailKey = email.toLowerCase();
 
+      let existingUser = userByName.get(nameKey) ||
+                         (phoneKey ? userByPhone.get(phoneKey) : null) ||
+                         userByEmail.get(emailKey);
+
+      try {
         if (existingUser) {
           uid = existingUser.uid;
-          const needsUpdate = existingUser.email !== email || 
-                              (phoneKey && !existingUser.phoneNumber) || 
-                              existingUser.displayName !== tenantName;
-          
-          if (needsUpdate) {
+          const needsUpdate = existingUser.displayName !== group.name ||
+                              (phoneKey && !existingUser.phoneNumber);
+          if (needsUpdate && auth.getUser) {
             const updatePayload = {
-              displayName: tenantName,
+              displayName: group.name,
               password: defaultPassword
             };
-            if (existingUser.email !== email) updatePayload.email = email;
-            if (phoneKey && !existingUser.phoneNumber) updatePayload.phoneNumber = phoneKey;
-            
-            await auth.updateUser(uid, updatePayload);
+            if (phoneKey && !existingUser.phoneNumber) {
+              updatePayload.phoneNumber = phoneKey;
+            }
+            try {
+              await auth.updateUser(uid, updatePayload);
+            } catch (upErr) {
+              // Ignore harmless phone conflict during update
+            }
           }
           authExistingCount++;
         } else {
@@ -254,7 +325,7 @@ async function runSync() {
             const createPayload = {
               email: email,
               password: defaultPassword,
-              displayName: tenantName
+              displayName: group.name
             };
             if (phoneKey) {
               createPayload.phoneNumber = phoneKey;
@@ -263,87 +334,104 @@ async function runSync() {
             uid = newUser.uid;
             if (phoneKey) userByPhone.set(phoneKey, newUser);
             userByEmail.set(emailKey, newUser);
+            userByName.set(nameKey, newUser);
             authCreatedCount++;
           } catch (createErr) {
             if (createErr.code === 'auth/email-already-exists') {
               const u = await auth.getUserByEmail(email);
               uid = u.uid;
               userByEmail.set(emailKey, u);
+              userByName.set(nameKey, u);
               authExistingCount++;
             } else if (phoneKey && createErr.code === 'auth/phone-number-already-exists') {
               const u = await auth.getUserByPhoneNumber(phoneKey);
               uid = u.uid;
               userByPhone.set(phoneKey, u);
+              userByName.set(nameKey, u);
               authExistingCount++;
             } else {
-              console.warn(`⚠️ تعذر إنشاء حساب Auth لـ (${email}):`, createErr.message);
+              const nameHash = Buffer.from(group.name).toString('hex').substring(0, 16);
+              uid = `tenant_${nameHash}`;
+              console.warn(`⚠️ تعذر إنشاء حساب Auth لـ (${group.name}):`, createErr.message);
             }
           }
         }
       } catch (err) {
-        console.warn(`⚠️ خطأ في معالجة Auth لـ (${email}):`, err.message);
+        console.warn(`⚠️ خطأ في معالجة Auth لـ (${group.name}):`, err.message);
+        const nameHash = Buffer.from(group.name).toString('hex').substring(0, 16);
+        uid = uid || `tenant_${nameHash}`;
       }
 
-      // 2. Prepare Contract Document in `contracts`
-      const contractDocId = sanitizedPhone ? `${sanitizedPhone}_${safeContractCode}` : `contract_${safeContractCode}`;
-      const contractRef = db.collection('contracts').doc(contractDocId);
-      const contractData = {
-        contractCode: row.contractCode || '',
-        contractNumber: row.contractNumber || null,
-        buildingName: buildingName,
-        unitNumber: unitNumber,
-        unitType: row.unitType || '',
-        tenantName: tenantName,
-        mobileNumber: sanitizedPhone || (row.mobileNumber ? String(row.mobileNumber).trim() : ''),
-        customerEmail: email,
-        email: email,
-        startDate: startTimestamp,
-        endDate: endTimestamp,
-        rentAmount: row.rentAmount || 0,
-        yearValue: row.yearValue || 0,
-        contractState: row.contractState || 'valid',
-        tenantUid: uid || null,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      };
-      currentBatch.set(contractRef, contractData, { merge: true });
-      currentBatchOps++;
+      // 5. Save each contract to `contracts` collection with tenantUid = uid
+      for (const c of group.contracts) {
+        const safeCode = (c.contractCode || `${c.unitNumber}_${c.contractNumber || 'nocode'}`)
+          .toString()
+          .replace(/[\/\\#\s]/g, '_');
+        const contractDocId = primaryMobile ? `${primaryMobile}_${safeCode}` : `contract_${safeCode}`;
+        const contractRef = db.collection('contracts').doc(contractDocId);
+        const contractData = {
+          contractCode: c.contractCode || '',
+          contractNumber: c.contractNumber || null,
+          buildingName: (c.buildingName || '').trim(),
+          unitNumber: (c.unitNumber || '').trim(),
+          unitType: c.unitType || '',
+          tenantName: group.name,
+          mobileNumber: primaryMobile || (c.mobileNumber ? String(c.mobileNumber).trim() : ''),
+          customerEmail: email,
+          email: email,
+          startDate: toMiddayTimestamp(c.startDate),
+          endDate: toMiddayTimestamp(c.endDate),
+          rentAmount: c.rentAmount || 0,
+          yearValue: c.yearValue || 0,
+          contractState: c.contractState || 'valid',
+          tenantUid: uid,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        };
+        currentBatch.set(contractRef, contractData, { merge: true });
+        currentBatchOps++;
+        processedCount++;
+      }
 
-      // 3. Prepare User Document in `users/{uid || fallbackDocId}`
-      const userDocId = uid || `tenant_${safeContractCode}`;
-      const userRef = db.collection('users').doc(userDocId);
+      // 6. Save unified tenant User document in `users/{uid}`
+      const userRef = db.collection('users').doc(uid);
+      const uniqueBuildings = [...new Set(properties.map(p => p.buildingName).filter(Boolean))];
+      const allApartments = properties.map(p => p.unitNumber).filter(Boolean);
+
       const userData = {
-        name: tenantName,
-        phone: sanitizedPhone || (row.mobileNumber ? String(row.mobileNumber).trim() : ''),
+        name: group.name,
+        phone: primaryMobile || (rawPhone ? String(rawPhone).trim() : ''),
+        allPhones: validMobiles,
         email: email,
         role: 'tenant',
-        apartmentId: unitNumber,
-        buildingId: buildingName,
-        contractStartDate: startIso,
-        contractEndDate: endIso,
-        contractCode: row.contractCode || '',
-        rentAmount: row.rentAmount || 0,
-        yearValue: row.yearValue || 0,
-        unitType: row.unitType || '',
+        properties: properties,
+        apartmentId: allApartments.join(', '),
+        buildingId: uniqueBuildings.join(', '),
+        contractStartDate: properties[0]?.startDate || null,
+        contractEndDate: properties[0]?.endDate || null,
+        contractCode: properties[0]?.contractCode || '',
+        rentAmount: properties.reduce((sum, p) => sum + (p.rentAmount || 0), 0),
+        yearValue: properties.reduce((sum, p) => sum + (p.yearValue || 0), 0),
+        unitType: properties.map(p => p.unitType).filter(Boolean).join(', '),
+        contractsCount: properties.length,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       };
       currentBatch.set(userRef, userData, { merge: true });
       currentBatchOps++;
 
-      // 4. Set phone_index mapping for secure, fast login by phone
-      if (sanitizedPhone) {
-        const phoneIndexRef = db.collection('phone_index').doc(sanitizedPhone);
-        currentBatch.set(phoneIndexRef, { email: email }, { merge: true });
+      // 7. Register ALL tenant phone numbers into `phone_index`
+      for (const m of validMobiles) {
+        const phoneIndexRef = db.collection('phone_index').doc(m);
+        currentBatch.set(phoneIndexRef, { email: email, uid: uid }, { merge: true });
         currentBatchOps++;
 
-        if (sanitizedPhone.startsWith('9715') && sanitizedPhone.length === 12) {
-          const localPhone = '05' + sanitizedPhone.substring(4);
+        if (m.startsWith('9715') && m.length === 12) {
+          const localPhone = '05' + m.substring(4);
           const localIndexRef = db.collection('phone_index').doc(localPhone);
-          currentBatch.set(localIndexRef, { email: email }, { merge: true });
+          currentBatch.set(localIndexRef, { email: email, uid: uid }, { merge: true });
           currentBatchOps++;
         }
       }
 
-      processedCount++;
       await commitBatchIfNeeded(false);
     }
 

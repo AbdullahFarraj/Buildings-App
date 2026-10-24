@@ -16,6 +16,7 @@ class UserModel {
   final String? contractUrl;
   final List<Map<String, String>>? documents;
   final String? fcmToken;
+  final List<TenantProperty>? properties;
 
   UserModel({
     required this.uid,
@@ -33,9 +34,37 @@ class UserModel {
     this.contractUrl,
     this.documents,
     this.fcmToken,
+    this.properties,
   });
 
+  /// Returns all properties rented by this tenant, falling back to legacy single building/apt fields
+  List<TenantProperty> get allProperties {
+    if (properties != null && properties!.isNotEmpty) {
+      return properties!;
+    }
+    if ((buildingId != null && buildingId!.isNotEmpty) ||
+        (apartmentId != null && apartmentId!.isNotEmpty)) {
+      return [
+        TenantProperty(
+          buildingName: buildingId ?? 'Building Not Set',
+          unitNumber: apartmentId ?? 'Not Set',
+          startDate: contractStartDate,
+          endDate: contractEndDate,
+        ),
+      ];
+    }
+    return [];
+  }
+
   factory UserModel.fromMap(Map<String, dynamic> map, String documentId) {
+    List<TenantProperty>? parsedProperties;
+    if (map['properties'] is List) {
+      parsedProperties = (map['properties'] as List)
+          .whereType<Map>()
+          .map((e) => TenantProperty.fromMap(Map<String, dynamic>.from(e)))
+          .toList();
+    }
+
     return UserModel(
       uid: documentId,
       name: map['name'] ?? '',
@@ -54,6 +83,7 @@ class UserModel {
           ?.map((e) => Map<String, String>.from(e))
           .toList(),
       fcmToken: map['fcmToken'],
+      properties: parsedProperties,
     );
   }
 
@@ -73,6 +103,8 @@ class UserModel {
       if (contractUrl != null) 'contractUrl': contractUrl,
       if (documents != null) 'documents': documents,
       if (fcmToken != null) 'fcmToken': fcmToken,
+      if (properties != null)
+        'properties': properties!.map((p) => p.toMap()).toList(),
     };
   }
 
@@ -92,6 +124,7 @@ class UserModel {
     String? contractUrl,
     List<Map<String, String>>? documents,
     String? fcmToken,
+    List<TenantProperty>? properties,
   }) {
     return UserModel(
       uid: uid ?? this.uid,
@@ -109,6 +142,65 @@ class UserModel {
       contractUrl: contractUrl ?? this.contractUrl,
       documents: documents ?? this.documents,
       fcmToken: fcmToken ?? this.fcmToken,
+      properties: properties ?? this.properties,
     );
   }
 }
+
+class TenantProperty {
+  final String buildingName;
+  final String unitNumber;
+  final String? unitType;
+  final String? contractCode;
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final double? rentAmount;
+  final double? yearValue;
+
+  TenantProperty({
+    required this.buildingName,
+    required this.unitNumber,
+    this.unitType,
+    this.contractCode,
+    this.startDate,
+    this.endDate,
+    this.rentAmount,
+    this.yearValue,
+  });
+
+  factory TenantProperty.fromMap(Map<String, dynamic> map) {
+    DateTime? parseDate(dynamic val) {
+      if (val == null) return null;
+      if (val is DateTime) return val;
+      if (val is String) return DateTime.tryParse(val)?.toLocal();
+      return null;
+    }
+
+    return TenantProperty(
+      buildingName: (map['buildingName'] ?? '').toString().trim(),
+      unitNumber: (map['unitNumber'] ?? '').toString().trim(),
+      unitType: map['unitType']?.toString().trim(),
+      contractCode: map['contractCode']?.toString().trim(),
+      startDate: parseDate(map['startDate']),
+      endDate: parseDate(map['endDate']),
+      rentAmount: (map['rentAmount'] as num?)?.toDouble(),
+      yearValue: (map['yearValue'] as num?)?.toDouble(),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'buildingName': buildingName,
+      'unitNumber': unitNumber,
+      if (unitType != null) 'unitType': unitType,
+      if (contractCode != null) 'contractCode': contractCode,
+      if (startDate != null) 'startDate': startDate!.toIso8601String(),
+      if (endDate != null) 'endDate': endDate!.toIso8601String(),
+      if (rentAmount != null) 'rentAmount': rentAmount,
+      if (yearValue != null) 'yearValue': yearValue,
+    };
+  }
+
+  String get displayName => '$buildingName - Apt: $unitNumber';
+}
+

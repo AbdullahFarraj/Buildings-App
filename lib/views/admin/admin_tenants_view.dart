@@ -49,9 +49,8 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
       
       // Extract unique building names dynamically from actual database records
       final dynamicBuildings = tenants
-          .map((t) => t.buildingId)
-          .where((b) => b != null && b.trim().isNotEmpty)
-          .cast<String>()
+          .expand((t) => t.allProperties.map((p) => p.buildingName))
+          .where((b) => b.trim().isNotEmpty)
           .toSet()
           .toList()..sort();
 
@@ -81,10 +80,14 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
     setState(() {
       _filteredTenants = _allTenants.where((t) {
         final nameMatch = t.name.toLowerCase().contains(query);
-        final aptMatch = (t.apartmentId ?? '').toLowerCase().contains(query);
-        final searchMatch = query.isEmpty || nameMatch || aptMatch;
+        final aptMatch = t.allProperties.any((p) => p.unitNumber.toLowerCase().contains(query)) ||
+            (t.apartmentId ?? '').toLowerCase().contains(query);
+        final buildingSearchMatch = t.allProperties.any((p) => p.buildingName.toLowerCase().contains(query));
+        final searchMatch = query.isEmpty || nameMatch || aptMatch || buildingSearchMatch;
         
-        final buildingMatch = _selectedBuilding == 'All Buildings' || t.buildingId == _selectedBuilding;
+        final buildingMatch = _selectedBuilding == 'All Buildings' ||
+            t.allProperties.any((p) => p.buildingName == _selectedBuilding) ||
+            t.buildingId == _selectedBuilding;
 
         return searchMatch && buildingMatch;
       }).toList();
@@ -216,15 +219,71 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              tenant.name,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    tenant.name,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  ),
+                                ),
+                                if (tenant.allProperties.length > 1)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primary.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.apartment, size: 14, color: AppColors.primary),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          '${tenant.allProperties.length} عقارات',
+                                          style: const TextStyle(
+                                            color: AppColors.primary,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${tenant.buildingId ?? 'Building Not Set'} - Apt: ${tenant.apartmentId ?? 'Not Set'}',
-                              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                            ),
+                            const SizedBox(height: 6),
+                            if (tenant.allProperties.length <= 1)
+                              Text(
+                                tenant.allProperties.isNotEmpty
+                                    ? tenant.allProperties.first.displayName
+                                    : '${tenant.buildingId ?? 'Building Not Set'} - Apt: ${tenant.apartmentId ?? 'Not Set'}',
+                                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                              )
+                            else
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                children: tenant.allProperties.map((p) {
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade100,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: Colors.grey.shade300),
+                                    ),
+                                    child: Text(
+                                      '🏢 ${p.buildingName} - Apt ${p.unitNumber}',
+                                      style: TextStyle(
+                                        color: Colors.grey.shade800,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
                           ],
                         ),
                       ),
