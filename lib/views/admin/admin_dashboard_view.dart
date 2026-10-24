@@ -125,6 +125,7 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
           _isLoadingUser = false;
         });
       }
+    }
   }
 
   void _showAssignBottomSheet(BuildContext context, MaintenanceTaskModel task) {
