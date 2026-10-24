@@ -63,8 +63,16 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
 
         final user = snapshot.data!;
 
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+        return RefreshIndicator(
+          onRefresh: () async {
+            setState(() {
+              _userFuture = _firestoreService.getUser(widget.tenantId);
+            });
+            await _userFuture;
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -246,9 +254,10 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
               const SizedBox(height: 24),
             ],
           ),
-        );
-      },
-    );
+        ),
+      );
+    },
+  );
   }
 
   Widget _buildSectionTitle(String title) {
