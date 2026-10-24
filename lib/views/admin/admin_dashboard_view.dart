@@ -40,6 +40,7 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
   UserModel? _adminUser;
   bool _isLoadingUser = true;
 
+  StreamSubscription<User?>? _authSub;
   StreamSubscription<List<NotificationModel>>? _notificationSub;
   final Set<String> _seenNotificationIds = {};
   bool _isInitialNotificationLoad = true;
@@ -47,20 +48,29 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
   @override
   void initState() {
     super.initState();
-    _loadAdminData();
-    _startForegroundNotificationListener();
+    _authSub = _auth.authStateChanges().listen((user) {
+      if (user != null) {
+        _loadAdminData(user.uid);
+        _startForegroundNotificationListener(user.uid);
+      }
+    });
+
+    final current = _auth.currentUser;
+    if (current != null) {
+      _loadAdminData(current.uid);
+      _startForegroundNotificationListener(current.uid);
+    }
   }
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _notificationSub?.cancel();
     super.dispose();
   }
 
-  void _startForegroundNotificationListener() {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-
+  void _startForegroundNotificationListener(String uid) {
+    _notificationSub?.cancel();
     _notificationSub = NotificationService().getUserNotifications(uid).listen((notifications) {
       if (_isInitialNotificationLoad) {
         for (var n in notifications) {
@@ -99,8 +109,8 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
     );
   }
 
-  Future<void> _loadAdminData() async {
-    final uid = _auth.currentUser?.uid;
+  Future<void> _loadAdminData([String? directUid]) async {
+    final uid = directUid ?? _auth.currentUser?.uid;
     if (uid != null) {
       final user = await _firestoreService.getUser(uid);
       if (mounted) {
@@ -115,7 +125,6 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
           _isLoadingUser = false;
         });
       }
-    }
   }
 
   void _showAssignBottomSheet(BuildContext context, MaintenanceTaskModel task) {
@@ -489,7 +498,9 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
                       ? 'Maintenance Requests' 
                       : _selectedIndex == 2
                           ? 'Tenant Directory' 
-                          : 'Technicians',
+                          : _selectedIndex == 3
+                              ? 'Technicians'
+                              : 'Inbox / Messages',
             ),
             if (!_isLoadingUser && _adminUser != null)
               Text(
