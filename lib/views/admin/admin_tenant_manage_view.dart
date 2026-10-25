@@ -250,16 +250,69 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
                 const SizedBox(height: 8),
                 ..._tenant.allProperties.map((p) => Card(
                   margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: const CircleAvatar(
-                      backgroundColor: AppColors.primary,
-                      child: Icon(Icons.apartment, color: AppColors.accent, size: 20),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const CircleAvatar(
+                          backgroundColor: AppColors.primary,
+                          child: Icon(Icons.apartment, color: AppColors.accent, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(p.buildingName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Unit: ${p.unitNumber} ${p.unitType != null && p.unitType!.isNotEmpty ? "(${p.unitType})" : ""}',
+                                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                              ),
+                              if (p.contractCode != null && p.contractCode!.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Contract: ${p.contractCode}',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+                                ),
+                              ],
+                              if (p.endDate != null) ...[
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.shade50,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.amber.shade300),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.event_available, size: 13, color: Colors.amber.shade900),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Expires: ${dateFormat.format(p.endDate!)}',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 11,
+                                          color: Colors.amber.shade900,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        if (p.rentAmount != null && p.rentAmount! > 0)
+                          Text(
+                            '${p.rentAmount!.toStringAsFixed(0)} AED',
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 13),
+                          ),
+                      ],
                     ),
-                    title: Text(p.buildingName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text('Unit: ${p.unitNumber} ${p.unitType != null ? "(${p.unitType})" : ""}'),
-                    trailing: p.rentAmount != null && p.rentAmount! > 0
-                        ? Text('${p.rentAmount!.toStringAsFixed(0)} AED', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green))
-                        : null,
                   ),
                 )),
                 const SizedBox(height: 20),

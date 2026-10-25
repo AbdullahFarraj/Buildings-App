@@ -65,6 +65,16 @@ class UserModel {
           .toList();
     }
 
+    DateTime? parseDate(dynamic val) {
+      if (val == null) return null;
+      if (val is DateTime) return val;
+      if (val is String) return DateTime.tryParse(val)?.toLocal();
+      try {
+        return (val as dynamic).toDate().toLocal();
+      } catch (_) {}
+      return null;
+    }
+
     return UserModel(
       uid: documentId,
       name: map['name'] ?? '',
@@ -76,8 +86,8 @@ class UserModel {
       profession: map['profession'],
       averageRating: map['averageRating']?.toDouble(),
       totalRatings: map['totalRatings']?.toInt(),
-      contractStartDate: map['contractStartDate'] != null ? DateTime.parse(map['contractStartDate']).toLocal() : null,
-      contractEndDate: map['contractEndDate'] != null ? DateTime.parse(map['contractEndDate']).toLocal() : null,
+      contractStartDate: parseDate(map['contractStartDate']),
+      contractEndDate: parseDate(map['contractEndDate']),
       contractUrl: map['contractUrl'],
       documents: (map['documents'] as List<dynamic>?)
           ?.map((e) => Map<String, String>.from(e))
@@ -173,6 +183,9 @@ class TenantProperty {
       if (val == null) return null;
       if (val is DateTime) return val;
       if (val is String) return DateTime.tryParse(val)?.toLocal();
+      try {
+        return (val as dynamic).toDate().toLocal();
+      } catch (_) {}
       return null;
     }
 

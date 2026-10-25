@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
 import '../../services/firestore_service.dart';
 import '../../models/user_model.dart';
 import '../../core/theme/app_colors.dart';
@@ -254,32 +255,56 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
                               ],
                             ),
                             const SizedBox(height: 6),
-                            if (tenant.allProperties.length <= 1)
+                            if (tenant.allProperties.length <= 1) ...[
                               Text(
                                 tenant.allProperties.isNotEmpty
                                     ? tenant.allProperties.first.displayName
                                     : '${tenant.buildingId ?? 'Building Not Set'} - Apt: ${tenant.apartmentId ?? 'Not Set'}',
                                 style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                              )
-                            else
+                              ),
+                              if ((tenant.allProperties.isNotEmpty ? tenant.allProperties.first.endDate : tenant.contractEndDate) != null) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Expires: ${DateFormat('dd MMM yyyy').format((tenant.allProperties.isNotEmpty ? tenant.allProperties.first.endDate : tenant.contractEndDate)!)}',
+                                  style: TextStyle(fontSize: 11, color: Colors.amber.shade900, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ] else
                               Wrap(
                                 spacing: 6,
                                 runSpacing: 4,
                                 children: tenant.allProperties.map((p) {
                                   return Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                     decoration: BoxDecoration(
                                       color: Colors.grey.shade100,
                                       borderRadius: BorderRadius.circular(6),
                                       border: Border.all(color: Colors.grey.shade300),
                                     ),
-                                    child: Text(
-                                      '🏢 ${p.buildingName} - Apt ${p.unitNumber}',
-                                      style: TextStyle(
-                                        color: Colors.grey.shade800,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                      ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          '🏢 ${p.buildingName} - Apt ${p.unitNumber}',
+                                          style: TextStyle(
+                                            color: Colors.grey.shade800,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        if (p.endDate != null) ...[
+                                          const SizedBox(height: 1),
+                                          Text(
+                                            'Exp: ${DateFormat('dd/MM/yyyy').format(p.endDate!)}',
+                                            style: TextStyle(
+                                              color: Colors.amber.shade900,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
                                     ),
                                   );
                                 }).toList(),

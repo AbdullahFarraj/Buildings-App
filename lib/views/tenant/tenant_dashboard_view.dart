@@ -163,6 +163,32 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                                   ),
                                 ),
                               ],
+                              if (prop.endDate != null) ...[
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.shade50,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.amber.shade300),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.event_available, size: 14, color: Colors.amber.shade900),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Expires: ${DateFormat('dd MMM yyyy').format(prop.endDate!)}',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color: Colors.amber.shade900,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -185,50 +211,83 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
               _buildContactManagementCard(user),
               const SizedBox(height: 32),
 
-              // Lease & Contract Card
-              _buildSectionTitle('Lease & Contract'),
+              // Lease & Contract Cards for each property
+              _buildSectionTitle('Lease & Contract Details'),
               const SizedBox(height: 12),
-              Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: const BorderSide(color: AppColors.border, width: 1),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              ...user.allProperties.map((prop) {
+                final startDate = prop.startDate ?? user.contractStartDate;
+                final endDate = prop.endDate ?? user.contractEndDate;
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  child: Card(
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: const BorderSide(color: AppColors.border, width: 1),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          _buildDateColumn('Start Date', user.contractStartDate),
-                          const Icon(Icons.arrow_forward_ios, size: 16, color: AppColors.textHint),
-                          _buildDateColumn('End Date', user.contractEndDate),
+                          Row(
+                            children: [
+                              const Icon(Icons.description_outlined, color: AppColors.primary, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '${prop.buildingName} - Apt ${prop.unitNumber}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.primary),
+                                ),
+                              ),
+                              if (prop.contractCode != null && prop.contractCode!.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade100,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.grey.shade300),
+                                  ),
+                                  child: Text(
+                                    prop.contractCode!,
+                                    style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const Divider(height: 24),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              _buildDateColumn('Start Date', startDate),
+                              const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.textHint),
+                              _buildDateColumn('End Date (Expiry)', endDate),
+                            ],
+                          ),
+                          if (startDate != null && endDate != null) ...[
+                            const SizedBox(height: 20),
+                            _buildTimelineProgress(startDate, endDate),
+                          ],
                         ],
                       ),
-                      if (user.contractStartDate != null && user.contractEndDate != null) ...[
-                        const SizedBox(height: 24),
-                        _buildTimelineProgress(user.contractStartDate!, user.contractEndDate!),
-                      ],
-                      if (user.contractUrl != null) ...[
-                        const SizedBox(height: 24),
-                        ElevatedButton.icon(
-                          onPressed: () => _launchUrl(user.contractUrl!),
-                          icon: const Icon(Icons.download),
-                          label: const Text('Download Original Contract'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                      ],
-                    ],
+                    ),
+                  ),
+                );
+              }),
+              if (user.contractUrl != null) ...[
+                const SizedBox(height: 8),
+                ElevatedButton.icon(
+                  onPressed: () => _launchUrl(user.contractUrl!),
+                  icon: const Icon(Icons.download),
+                  label: const Text('Download Original Contract'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
-              ),
+              ],
               const SizedBox(height: 32),
 
               // Additional Documents

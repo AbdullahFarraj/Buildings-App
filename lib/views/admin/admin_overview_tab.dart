@@ -97,14 +97,29 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
     }
   }
 
-  List<UserModel> get _expiringContracts {
+  List<Map<String, dynamic>> get _expiringContracts {
     final now = DateTime.now();
-    return _tenants.where((t) {
-      if (t.contractEndDate == null) return false;
-      final diff = t.contractEndDate!.difference(now).inDays;
-      return diff >= 0 && diff <= 60; // Expiring within 60 days
-    }).toList()
-      ..sort((a, b) => a.contractEndDate!.compareTo(b.contractEndDate!));
+    final List<Map<String, dynamic>> list = [];
+    for (final t in _tenants) {
+      for (final prop in t.allProperties) {
+        final end = prop.endDate ?? t.contractEndDate;
+        if (end != null) {
+          final diff = end.difference(now).inDays;
+          if (diff >= 0 && diff <= 60) {
+            list.add({
+              'tenant': t,
+              'tenantName': t.name,
+              'buildingName': prop.buildingName,
+              'unitNumber': prop.unitNumber,
+              'endDate': end,
+              'daysRemaining': diff,
+            });
+          }
+        }
+      }
+    }
+    list.sort((a, b) => (a['endDate'] as DateTime).compareTo(b['endDate'] as DateTime));
+    return list;
   }
 
   @override
@@ -330,8 +345,8 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
       itemCount: _expiringContracts.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
-        final tenant = _expiringContracts[index];
-        final days = tenant.contractEndDate!.difference(DateTime.now()).inDays;
+        final item = _expiringContracts[index];
+        final days = item['daysRemaining'] as int;
         
         return Container(
           padding: const EdgeInsets.all(12),
@@ -356,11 +371,11 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      tenant.name,
+                      item['tenantName'] as String,
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                     ),
                     Text(
-                      '${tenant.buildingId ?? 'Building'} - Apt ${tenant.apartmentId}',
+                      '${item['buildingName']} - Apt ${item['unitNumber']}',
                       style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
                     ),
                   ],
@@ -381,6 +396,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                   const SizedBox(height: 4),
                   InkWell(
                     onTap: () async {
+                      final tenant = item['tenant'] as UserModel;
                       await NotificationService().sendContractExpiryReminder(tenant.uid);
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
