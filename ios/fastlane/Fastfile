@@ -15,14 +15,20 @@ platform :ios do
       in_house: false
     )
 
-    # 3. Create or fetch Distribution Certificate and Provisioning Profile
-    get_certificates(api_key: api_key)
-    get_provisioning_profile(
+    # 3. Generate Distribution Certificate & Private Key on this CI machine
+    get_certificates(
       api_key: api_key,
-      app_identifier: "com.eliteliving.app"
+      force: true
     )
 
-    # 4. Build and sign the iOS archive into an App Store IPA
+    # 4. Generate matching App Store Provisioning Profile
+    get_provisioning_profile(
+      api_key: api_key,
+      app_identifier: "com.eliteliving.app",
+      force: true
+    )
+
+    # 5. Build and sign the iOS archive into an App Store IPA
     build_app(
       workspace: "Runner.xcworkspace",
       scheme: "Runner",
@@ -31,7 +37,7 @@ platform :ios do
       output_name: "EliteLiving.ipa"
     )
 
-    # 5. Upload directly to TestFlight
+    # 6. Upload directly to TestFlight
     upload_to_testflight(
       api_key: api_key,
       skip_waiting_for_build_processing: true
