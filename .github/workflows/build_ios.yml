@@ -47,13 +47,14 @@ jobs:
       - name: Build iOS Application
         run: flutter build ios --release --no-codesign
 
-      # 7. Package Runner.app into an installable .ipa file
+      # 7. Package Runner.app into an installable .ipa file with symlinks preserved (-y)
       - name: Package IPA
         run: |
           mkdir -p build/ios/ipa/Payload
           cp -R build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
           cd build/ios/ipa
-          zip -r -q EliteLiving.ipa Payload
+          # Crucial: -y preserves symlinks required for signing iOS frameworks (like Flutter.framework)
+          zip -r -y -q EliteLiving.ipa Payload
           echo "IPA created successfully at build/ios/ipa/EliteLiving.ipa"
 
       # 8. Upload the IPA as a downloadable artifact
