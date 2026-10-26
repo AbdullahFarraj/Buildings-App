@@ -1,0 +1,69 @@
+name: Deploy to TestFlight
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'sync_service/**'
+      - '.gitignore'
+
+jobs:
+  deploy-testflight:
+    name: Build & Upload to TestFlight
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      # 1. Checkout repository code
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 2. Setup Flutter environment
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      # 3. Setup Ruby and install Fastlane
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+          working-directory: ios
+
+      # 4. Prepare Flutter build directories & config
+      - name: Configure Flutter & Prepare Build Directories
+        run: |
+          flutter config --no-enable-swift-package-manager
+          mkdir -p build/ios/SourcePackages
+
+      # 5. Install Flutter dependencies
+      - name: Install Dependencies
+        run: flutter pub get
+
+      # 6. Pre-compile Flutter iOS Release bundle (increments build number automatically)
+      - name: Precompile Flutter iOS
+        run: flutter build ios --release --no-codesign --build-number=${{ github.run_number }}
+
+      # 7. Sign and Upload to TestFlight via Fastlane
+      - name: Deploy to TestFlight via Fastlane
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+        run: |
+          cd ios
+          bundle exec fastlane beta
+
+      # 8. Upload the signed IPA as a downloadable artifact (backup)
+      - name: Upload Signed IPA Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EliteLiving-Signed-IPA
+          path: build/ios/ipa/EliteLiving.ipa
+          retention-days: 14

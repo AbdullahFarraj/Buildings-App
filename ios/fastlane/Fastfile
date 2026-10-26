@@ -1,0 +1,40 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Build and upload signed iOS release to TestFlight"
+  lane :beta do
+    # 1. Setup temporary CI keychain for certificates
+    setup_ci
+
+    # 2. Authenticate using App Store Connect API Key
+    api_key = app_store_connect_api_key(
+      key_id: ENV["APP_STORE_CONNECT_API_KEY_ID"],
+      issuer_id: ENV["APP_STORE_CONNECT_API_ISSUER_ID"],
+      key_content: ENV["APP_STORE_CONNECT_API_KEY"],
+      is_key_content_base64: false,
+      in_house: false
+    )
+
+    # 3. Create or fetch Distribution Certificate and Provisioning Profile
+    get_certificates(api_key: api_key)
+    get_provisioning_profile(
+      api_key: api_key,
+      app_identifier: "com.eliteliving.app"
+    )
+
+    # 4. Build and sign the iOS archive into an App Store IPA
+    build_app(
+      workspace: "Runner.xcworkspace",
+      scheme: "Runner",
+      export_method: "app-store",
+      output_directory: "../build/ios/ipa",
+      output_name: "EliteLiving.ipa"
+    )
+
+    # 5. Upload directly to TestFlight
+    upload_to_testflight(
+      api_key: api_key,
+      skip_waiting_for_build_processing: true
+    )
+  end
+end
