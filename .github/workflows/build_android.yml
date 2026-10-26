@@ -1,0 +1,52 @@
+name: Build Android (APK)
+
+on:
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'sync_service/**'
+      - '.gitignore'
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # 1. Checkout repository code
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 2. Setup Java 17 for Android Gradle build
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      # 3. Setup Flutter environment
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      # 4. Install dependencies
+      - name: Install Dependencies
+        run: flutter pub get
+
+      # 5. Build Android APK (Release)
+      - name: Build Release APK
+        run: flutter build apk --release
+
+      # 6. Upload APK Artifact
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EliteLiving-Android-APK
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 14
