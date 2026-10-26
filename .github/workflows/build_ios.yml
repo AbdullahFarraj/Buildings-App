@@ -33,16 +33,21 @@ jobs:
           flutter --version
           xcodebuild -version
 
-      # 4. Install dependencies
+      # 4. Disable SwiftPM and prepare directories (Fixes Flutter rsync SourcePackages bug)
+      - name: Configure Flutter & Prepare Build Directories
+        run: |
+          flutter config --no-enable-swift-package-manager
+          mkdir -p build/ios/SourcePackages
+
+      # 5. Install dependencies
       - name: Install Dependencies
         run: flutter pub get
 
-      # 5. Build iOS App (Release, unsigned for sideloading / testing)
-      # Flutter automatically generates pods and builds the iOS project natively
+      # 6. Build iOS App (Release, unsigned for sideloading / testing)
       - name: Build iOS Application
         run: flutter build ios --release --no-codesign
 
-      # 6. Package Runner.app into an installable .ipa file
+      # 7. Package Runner.app into an installable .ipa file
       - name: Package IPA
         run: |
           mkdir -p build/ios/ipa/Payload
@@ -51,7 +56,7 @@ jobs:
           zip -r -q EliteLiving.ipa Payload
           echo "IPA created successfully at build/ios/ipa/EliteLiving.ipa"
 
-      # 7. Upload the IPA as a downloadable artifact
+      # 8. Upload the IPA as a downloadable artifact
       - name: Upload iOS IPA Artifact
         uses: actions/upload-artifact@v4
         with:
