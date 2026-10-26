@@ -1,7 +1,7 @@
 name: Build iOS (iPhone IPA)
 
 on:
-  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+  workflow_dispatch:
   push:
     branches: [ main ]
     paths-ignore:
@@ -12,7 +12,7 @@ on:
 jobs:
   build-ios:
     name: Build iOS App (.ipa)
-    runs-on: macos-14 # Fast Apple Silicon M2/M3 macOS runner
+    runs-on: macos-14
     timeout-minutes: 45
 
     steps:
@@ -27,30 +27,22 @@ jobs:
           channel: 'stable'
           cache: true
 
-      # 3. Verify Flutter & Xcode installation
+      # 3. Print Flutter & Xcode versions
       - name: Print Flutter & Xcode Version
         run: |
           flutter --version
           xcodebuild -version
 
-      # 4. Install Dart / Flutter dependencies
-      - name: Install Flutter Dependencies
+      # 4. Install dependencies
+      - name: Install Dependencies
         run: flutter pub get
 
-      # 5. Install CocoaPods dependencies for iOS plugins
-      - name: Install CocoaPods
-        run: |
-          cd ios
-          pod repo update
-          pod install
-          cd ..
-
-      # 6. Build iOS App (Release, unsigned for sideloading / testing)
+      # 5. Build iOS App (Release, unsigned for sideloading / testing)
+      # Flutter automatically generates pods and builds the iOS project natively
       - name: Build iOS Application
-        run: |
-          flutter build ios --release --no-codesign
+        run: flutter build ios --release --no-codesign
 
-      # 7. Package Runner.app into an installable .ipa file
+      # 6. Package Runner.app into an installable .ipa file
       - name: Package IPA
         run: |
           mkdir -p build/ios/ipa/Payload
@@ -59,7 +51,7 @@ jobs:
           zip -r -q EliteLiving.ipa Payload
           echo "IPA created successfully at build/ios/ipa/EliteLiving.ipa"
 
-      # 8. Upload the IPA as a downloadable artifact
+      # 7. Upload the IPA as a downloadable artifact
       - name: Upload iOS IPA Artifact
         uses: actions/upload-artifact@v4
         with:
