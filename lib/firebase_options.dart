@@ -64,7 +64,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '14052857715',
     projectId: 'building-app1',
     storageBucket: 'building-app1.firebasestorage.app',
-    iosBundleId: 'com.example.buildingApp',
+    iosBundleId: 'com.eliteliving.app',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
@@ -73,7 +73,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '14052857715',
     projectId: 'building-app1',
     storageBucket: 'building-app1.firebasestorage.app',
-    iosBundleId: 'com.example.buildingApp',
+    iosBundleId: 'com.eliteliving.app',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
