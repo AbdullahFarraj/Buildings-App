@@ -15,10 +15,9 @@ platform :ios do
       in_house: false
     )
 
-    # 3. Generate Distribution Certificate & Private Key on this CI machine
+    # 3. Generate fresh Distribution Certificate & Private Key
     get_certificates(
-      api_key: api_key,
-      force: true
+      api_key: api_key
     )
 
     # 4. Generate matching App Store Provisioning Profile
@@ -28,10 +27,11 @@ platform :ios do
       force: true
     )
 
-    # 5. Build and sign the iOS archive into an App Store IPA
+    # 5. Build and sign the official App Store archive and IPA
     build_app(
       workspace: "Runner.xcworkspace",
       scheme: "Runner",
+      clean: true,
       export_method: "app-store",
       output_directory: "../build/ios/ipa",
       output_name: "EliteLiving.ipa"
