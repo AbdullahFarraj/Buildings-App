@@ -12,7 +12,7 @@ on:
 jobs:
   build-ios:
     name: Build iOS App (.ipa)
-    runs-on: macos-14
+    runs-on: macos-15 # macOS Sequoia with Xcode 16 & Swift 6 preinstalled
     timeout-minutes: 45
 
     steps:
@@ -33,7 +33,7 @@ jobs:
           flutter --version
           xcodebuild -version
 
-      # 4. Disable SwiftPM and prepare directories (Fixes Flutter rsync SourcePackages bug)
+      # 4. Disable SwiftPM and prepare directories
       - name: Configure Flutter & Prepare Build Directories
         run: |
           flutter config --no-enable-swift-package-manager
