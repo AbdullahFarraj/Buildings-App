@@ -484,6 +484,7 @@ class _ChatSheetState extends State<ChatSheet> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 }
