@@ -82,7 +82,6 @@ class StorageService {
       rethrow;
     }
   }
-  }
 
   String _inferContentType(String fileName) {
     final ext = fileName.split('.').last.toLowerCase();
