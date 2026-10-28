@@ -95,7 +95,7 @@ jobs:
       # 7. Configure Flutter iOS Release & CocoaPods (increments build number automatically)
       - name: Prepare Flutter iOS & Pods
         run: |
-          flutter build ios --config-only --release --build-number=${{ github.run_number }}
+          flutter build ios --config-only --no-codesign --release --build-number=${{ github.run_number }}
           cd ios
           pod install
 
