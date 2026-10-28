@@ -70,11 +70,11 @@ jobs:
           security import /tmp/AppleWWDRCAG6.cer -k "$KEYCHAIN_PATH" -T /usr/bin/codesign
 
           # 3. Decode and import the Distribution Certificate (.p12)
-          echo "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o /tmp/dist_cert.p12
-          security import /tmp/dist_cert.p12 -k "$KEYCHAIN_PATH" -P "$P12_PASSWORD" -T /usr/bin/codesign -A
+          echo "$BUILD_CERTIFICATE_BASE64" | base64 --decode > /tmp/dist_cert.p12
+          security import /tmp/dist_cert.p12 -k "$KEYCHAIN_PATH" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
 
           # 4. Allow codesign access without popup dialogs
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
           # 5. Set keychain search list
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
