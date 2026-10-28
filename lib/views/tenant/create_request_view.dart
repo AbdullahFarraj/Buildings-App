@@ -30,7 +30,7 @@ class _CreateRequestViewState extends State<CreateRequestView> {
   String _selectedCategory = 'Plumbing';
   final List<String> _categories = ['Plumbing', 'Electrical', 'HVAC', 'Other'];
   
-  List<XFile> _imageFiles = [];
+  final List<XFile> _imageFiles = [];
   bool _isSubmitting = false;
 
   DateTime? _selectedDate;

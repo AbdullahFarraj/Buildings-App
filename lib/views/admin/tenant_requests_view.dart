@@ -52,7 +52,7 @@ class TenantRequestsView extends StatelessWidget {
           return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: tasks.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            separatorBuilder: (_, _) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
               final task = tasks[index];
               final dateFormat = DateFormat('MMM dd, yyyy - hh:mm a');

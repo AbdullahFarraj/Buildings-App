@@ -261,7 +261,7 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
         return ListView.separated(
           padding: const EdgeInsets.all(16),
           itemCount: tasks.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          separatorBuilder: (_, _) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
             final task = tasks[index];
             final dateFormat = DateFormat('MMM dd, yyyy - hh:mm a');
@@ -379,9 +379,9 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                           decoration: BoxDecoration(
-                            color: AppColors.primaryLight.withOpacity(0.1),
+                            color: AppColors.primaryLight.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: AppColors.primaryLight.withOpacity(0.3)),
+                            border: Border.all(color: AppColors.primaryLight.withValues(alpha: 0.3)),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -777,7 +777,7 @@ class _AssignTechnicianSheetState extends State<AssignTechnicianSheet> {
                       subtitle: Text(
                         '${tech.profession ?? 'No profession'} • ${tech.phone}',
                         style: TextStyle(
-                          color: isAssigned ? AppColors.statusApprovedText.withOpacity(0.8) : AppColors.textSecondary,
+                          color: isAssigned ? AppColors.statusApprovedText.withValues(alpha: 0.8) : AppColors.textSecondary,
                         ),
                       ),
                       trailing: Row(

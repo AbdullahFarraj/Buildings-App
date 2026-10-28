@@ -39,7 +39,7 @@ class AppNotificationToast {
                   border: Border.all(color: AppColors.accent, width: 2),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.18),
+                      color: Colors.black.withValues(alpha: 0.18),
                       blurRadius: 20,
                       offset: const Offset(0, 8),
                     ),
@@ -53,7 +53,7 @@ class AppNotificationToast {
                       width: 42,
                       height: 42,
                       decoration: BoxDecoration(
-                        color: AppColors.accent.withOpacity(0.15),
+                        color: AppColors.accent.withValues(alpha: 0.15),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(

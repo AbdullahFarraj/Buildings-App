@@ -49,7 +49,7 @@ class TenantAlertsView extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.08),
+                    color: AppColors.primary.withValues(alpha: 0.08),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.notifications_none, size: 54, color: AppColors.primary),
@@ -150,7 +150,7 @@ class TenantAlertsView extends StatelessWidget {
 
     IconData iconData = Icons.notifications_active;
     Color iconColor = AppColors.primary;
-    Color iconBg = AppColors.primary.withOpacity(0.1);
+    Color iconBg = AppColors.primary.withValues(alpha: 0.1);
 
     if (notification.title.contains('💬') || notification.title.toLowerCase().contains('chat') || notification.title.toLowerCase().contains('message')) {
       iconData = Icons.chat_bubble_outline;
@@ -175,11 +175,11 @@ class TenantAlertsView extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: isRead ? AppColors.border : AppColors.primary.withOpacity(0.5),
+          color: isRead ? AppColors.border : AppColors.primary.withValues(alpha: 0.5),
           width: isRead ? 1 : 1.5,
         ),
       ),
-      color: isRead ? Colors.white : AppColors.primaryLight.withOpacity(0.06),
+      color: isRead ? Colors.white : AppColors.primaryLight.withValues(alpha: 0.06),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: () => _openAlertDetails(context, notification, service),
@@ -300,7 +300,7 @@ class TenantAlertsView extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
+                  color: AppColors.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(Icons.notifications_active, color: AppColors.primary, size: 24),

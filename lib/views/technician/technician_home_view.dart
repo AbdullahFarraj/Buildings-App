@@ -9,7 +9,6 @@ import '../../widgets/status_badge.dart';
 import '../../core/enums/task_status.dart';
 import '../../core/theme/app_colors.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/storage_service.dart';
 import '../../services/notification_service.dart';
@@ -107,7 +106,7 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
 
   void _showCompletionDialog(MaintenanceTaskModel task) {
     final TextEditingController notesController = TextEditingController();
-    XFile? _selectedImage;
+    XFile? selectedImage;
 
     showModalBottomSheet(
       context: context,
@@ -137,14 +136,14 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  if (_selectedImage != null)
+                  if (selectedImage != null)
                     Stack(
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(8),
                           child: kIsWeb
-                              ? Image.network(_selectedImage!.path, height: 120, width: double.infinity, fit: BoxFit.cover)
-                              : Image.file(File(_selectedImage!.path), height: 120, width: double.infinity, fit: BoxFit.cover),
+                              ? Image.network(selectedImage!.path, height: 120, width: double.infinity, fit: BoxFit.cover)
+                              : Image.file(File(selectedImage!.path), height: 120, width: double.infinity, fit: BoxFit.cover),
                         ),
                         Positioned(
                           right: 4,
@@ -156,7 +155,7 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
                               padding: EdgeInsets.zero,
                               icon: const Icon(Icons.close, size: 16, color: Colors.white),
                               onPressed: () {
-                                setSheetState(() => _selectedImage = null);
+                                setSheetState(() => selectedImage = null);
                               },
                             ),
                           ),
@@ -168,7 +167,7 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
                       onPressed: () async {
                         final file = await _storageService.pickImage(ImageSource.camera);
                         if (file != null) {
-                          setSheetState(() => _selectedImage = file);
+                          setSheetState(() => selectedImage = file);
                         }
                       },
                       icon: const Icon(Icons.camera_alt),
@@ -199,8 +198,8 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
 
                       try {
                         String? photoUrl;
-                        if (_selectedImage != null) {
-                          photoUrl = await _storageService.uploadCompletionProof(_selectedImage!, task.id);
+                        if (selectedImage != null) {
+                          photoUrl = await _storageService.uploadCompletionProof(selectedImage!, task.id);
                         }
 
                         await _firestoreService.updateTaskStatus(
@@ -375,9 +374,9 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                           decoration: BoxDecoration(
-                            color: Colors.amber.withOpacity(0.15),
+                            color: Colors.amber.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.amber.withOpacity(0.5)),
+                            border: Border.all(color: Colors.amber.withValues(alpha: 0.5)),
                           ),
                           child: Row(
                             children: [

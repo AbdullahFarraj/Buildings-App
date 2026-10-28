@@ -235,7 +235,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.3),
+              color: color.withValues(alpha: 0.3),
               blurRadius: 8,
               offset: const Offset(0, 4),
             )
@@ -306,7 +306,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: AppColors.primaryLight.withOpacity(0.05),
+          color: AppColors.primaryLight.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: AppColors.border),
         ),
@@ -343,7 +343,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: _expiringContracts.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final item = _expiringContracts[index];
         final days = item['daysRemaining'] as int;
@@ -351,16 +351,16 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
         return Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.orange.withOpacity(0.05),
+            color: Colors.orange.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.orange.withOpacity(0.3)),
+            border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
           ),
           child: Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.2),
+                  color: Colors.orange.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.description, color: Colors.orange, size: 20),
@@ -423,7 +423,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: _recentTasks.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final task = _recentTasks[index];
         return Card(
@@ -458,9 +458,9 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         status.name.toUpperCase(),
@@ -516,7 +516,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                   const Text('Send a message to all tenants in the system.', style: TextStyle(color: AppColors.textSecondary)),
                   const SizedBox(height: 24),
                   DropdownButtonFormField<String>(
-                    value: selectedBuilding,
+                    initialValue: selectedBuilding,
                     decoration: const InputDecoration(
                       labelText: 'Target Building',
                       prefixIcon: Icon(Icons.apartment),

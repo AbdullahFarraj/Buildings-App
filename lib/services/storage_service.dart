@@ -1,5 +1,4 @@
-import 'dart:io';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
@@ -42,7 +41,7 @@ class StorageService {
         final url = await snapshot.ref.getDownloadURL();
         urls.add(url);
       } catch (e) {
-        print('Error uploading task photo: $e');
+        debugPrint('Error uploading task photo: $e');
       }
     }
     return urls;
@@ -61,7 +60,7 @@ class StorageService {
       final TaskSnapshot snapshot = await uploadTask;
       return await snapshot.ref.getDownloadURL();
     } catch (e) {
-      print('Error uploading completion proof: $e');
+      debugPrint('Error uploading completion proof: $e');
       return null;
     }
   }
@@ -76,7 +75,7 @@ class StorageService {
       final TaskSnapshot snapshot = await uploadTask;
       return await snapshot.ref.getDownloadURL();
     } catch (e) {
-      print('Error uploading chat file: $e');
+      debugPrint('Error uploading chat file: $e');
       return null;
     }
   }
@@ -90,7 +89,7 @@ class StorageService {
       final TaskSnapshot snapshot = await uploadTask;
       return await snapshot.ref.getDownloadURL();
     } catch (e) {
-      print('Error uploading chat file bytes: $e');
+      debugPrint('Error uploading chat file bytes: $e');
       return null;
     }
   }

@@ -95,6 +95,7 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
     });
   }
 
+  @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -192,7 +193,7 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         itemCount: _filteredTenants.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        separatorBuilder: (_, _) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           final tenant = _filteredTenants[index];
           return Card(
@@ -361,12 +362,12 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
                             if (confirm == true) {
                               try {
                                 await _firestoreService.deleteUser(tenant.uid);
-                                if (mounted) {
+                                if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tenant deleted successfully.')));
                                   _fetchTenants(); // Refresh list
                                 }
                               } catch (e) {
-                                if (mounted) {
+                                if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
                                 }
                               }
@@ -386,7 +387,7 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
                             
                             // Get admin user model
                             final adminModel = await _firestoreService.getUser(currentAdmin.uid);
-                            if (adminModel == null || !mounted) return;
+                            if (adminModel == null || !context.mounted) return;
 
                             showModalBottomSheet(
                               context: context,

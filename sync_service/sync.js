@@ -133,7 +133,8 @@ async function runSync() {
           v.ToDate                              AS endDate,
           v.Rent                                AS rentAmount,
           v.YearValue                           AS yearValue,
-          LTRIM(RTRIM(v.ContractState))         AS contractState
+          LTRIM(RTRIM(v.ContractState))         AS contractState,
+          v.CustomerGuid                        AS customerGuid
       FROM vwLeaseApartment v
       LEFT JOIN Customer c ON v.CustomerGuid = c.Guid
       WHERE LTRIM(RTRIM(v.ContractState)) = 'valid'
@@ -195,8 +196,10 @@ async function runSync() {
 
     // Pre-fetch existing Firestore users to map Name -> UID
     const firestoreUsersSnap = await db.collection('users').get();
+    const firestoreDataByUid = new Map();
     for (const doc of firestoreUsersSnap.docs) {
       const data = doc.data();
+      firestoreDataByUid.set(doc.id, data);
       if (data.name) {
         const norm = normalizeTenantName(data.name).toLowerCase();
         if (!userByName.has(norm)) {
@@ -224,25 +227,66 @@ async function runSync() {
       }
     }
 
-    // Group rows by Normalized Tenant Name
-    console.log('⏳ جاري تجميع كافة العقود حسب اسم المستأجر (Name Grouping)...');
-    const tenantGroups = new Map();
+    // Group rows by customer identity.
+    // ⚠️ Previously grouped by NAME only, which merged different tenants sharing the same name
+    // into one account (each could see the other's contracts). Now:
+    //   1) group by CustomerGuid (the real customer ID in SQL Server), falling back to name
+    //   2) then merge groups that share the same valid mobile number (same person, duplicate customer records)
+    console.log('⏳ جاري تجميع كافة العقود حسب هوية العميل (CustomerGuid + رقم الهاتف)...');
+    const rawGroups = new Map();
     for (const row of rows) {
       const normName = normalizeTenantName(row.tenantName);
-      if (!tenantGroups.has(normName)) {
-        tenantGroups.set(normName, {
-          name: normName,
-          contracts: [],
-          rawMobiles: [],
-          customerEmails: []
-        });
+      const key = row.customerGuid
+        ? `guid:${String(row.customerGuid).toLowerCase()}`
+        : `name:${normName.toLowerCase()}`;
+      if (!rawGroups.has(key)) {
+        rawGroups.set(key, { key, name: normName, contracts: [], rawMobiles: [], customerEmails: [] });
       }
-      const group = tenantGroups.get(normName);
-      group.contracts.push(row);
-      if (row.mobileNumber) group.rawMobiles.push(row.mobileNumber);
-      if (row.customerEmail) group.customerEmails.push(row.customerEmail);
+      const g = rawGroups.get(key);
+      g.contracts.push(row);
+      if (row.mobileNumber) g.rawMobiles.push(row.mobileNumber);
+      if (row.customerEmail) g.customerEmails.push(row.customerEmail);
+    }
+
+    // Union-find: merge groups sharing a sanitized mobile number
+    const parent = new Map([...rawGroups.keys()].map(k => [k, k]));
+    const find = (k) => { while (parent.get(k) !== k) { parent.set(k, parent.get(parent.get(k))); k = parent.get(k); } return k; };
+    const mobileToKey = new Map();
+    for (const g of rawGroups.values()) {
+      for (const m of g.rawMobiles) {
+        const s = sanitizeUaeMobile(m);
+        if (!s) continue;
+        if (mobileToKey.has(s)) parent.set(find(g.key), find(mobileToKey.get(s)));
+        else mobileToKey.set(s, g.key);
+      }
+    }
+    const tenantGroups = new Map();
+    for (const g of rawGroups.values()) {
+      const root = find(g.key);
+      if (!tenantGroups.has(root)) {
+        tenantGroups.set(root, { key: root, name: rawGroups.get(root).name, contracts: [], rawMobiles: [], customerEmails: [] });
+      }
+      const target = tenantGroups.get(root);
+      target.contracts.push(...g.contracts);
+      target.rawMobiles.push(...g.rawMobiles);
+      target.customerEmails.push(...g.customerEmails);
     }
     console.log(`👥 تم العثور على ${tenantGroups.size} مستأجر فريد من أصل ${rows.length} عقداً نشطاً.`);
+
+    // Report names shared by more than one distinct tenant (these were wrongly merged before)
+    const nameCounts = new Map();
+    for (const g of tenantGroups.values()) {
+      const n = g.name.toLowerCase();
+      nameCounts.set(n, (nameCounts.get(n) || 0) + 1);
+    }
+    const sharedNames = [...nameCounts.entries()].filter(([, c]) => c > 1);
+    if (sharedNames.length) {
+      console.log(`⚠️ ${sharedNames.length} اسم مشترك بين أكثر من مستأجر مختلف (تم فصلهم الآن):`);
+      for (const [n, c] of sharedNames) console.log(`   - ${n} (${c} مستأجرين)`);
+    }
+
+    // Tracks which tenant group already claimed a uid in this run (prevents merging by name)
+    const claimedUids = new Map();
 
     console.log('⏳ جاري معالجة العقود، ربط العقارات بالحسابات، وتحديث الفايربيس...');
     for (const group of tenantGroups.values()) {
@@ -297,15 +341,30 @@ async function runSync() {
         };
       });
 
-      // 4. In-Memory Lookup & Auth Sync (Priority: Name -> Phone -> Email)
+      // 4. In-Memory Lookup & Auth Sync (Priority: Phone -> Email -> Name if unclaimed)
       let uid;
       const nameKey = group.name.toLowerCase();
       const phoneKey = primaryMobile ? `+${primaryMobile}` : null;
       const emailKey = email.toLowerCase();
 
-      let existingUser = userByName.get(nameKey) ||
-                         (phoneKey ? userByPhone.get(phoneKey) : null) ||
+      // Look up existing user, but prioritize Phone and Email over Name to avoid false merges
+      let existingUser = (phoneKey ? userByPhone.get(phoneKey) : null) ||
                          userByEmail.get(emailKey);
+
+      // If matched by phone/email, verify it wasn't claimed by a different tenant in this run
+      if (existingUser && claimedUids.has(existingUser.uid) && claimedUids.get(existingUser.uid) !== group.key) {
+        existingUser = null;
+      }
+
+      // Fallback: match by name ONLY if no conflicting claim exists
+      if (!existingUser) {
+        const byName = userByName.get(nameKey);
+        if (byName && (!claimedUids.has(byName.uid) || claimedUids.get(byName.uid) === group.key)) {
+          existingUser = byName;
+        }
+      }
+
+      let isNewUserCreated = false;
 
       try {
         if (existingUser) {
@@ -339,6 +398,7 @@ async function runSync() {
             }
             const newUser = await auth.createUser(createPayload);
             uid = newUser.uid;
+            isNewUserCreated = true;
             if (phoneKey) userByPhone.set(phoneKey, newUser);
             userByEmail.set(emailKey, newUser);
             userByName.set(nameKey, newUser);
@@ -368,6 +428,8 @@ async function runSync() {
         const nameHash = Buffer.from(group.name).toString('hex').substring(0, 16);
         uid = uid || `tenant_${nameHash}`;
       }
+
+      claimedUids.set(uid, group.key);
 
       // 5. Save each contract to `contracts` collection with tenantUid = uid
       for (const c of group.contracts) {
@@ -404,12 +466,17 @@ async function runSync() {
       const uniqueBuildings = [...new Set(properties.map(p => p.buildingName).filter(Boolean))];
       const allApartments = properties.map(p => p.unitNumber).filter(Boolean);
 
+      // Check if user already changed their password
+      const existingFirestoreUser = firestoreDataByUid.get(uid);
+      const mustChangePassword = existingFirestoreUser?.passwordChangedAt ? false : (existingFirestoreUser?.mustChangePassword ?? true);
+
       const userData = {
         name: group.name,
         phone: primaryMobile || (rawPhone ? String(rawPhone).trim() : ''),
         allPhones: validMobiles,
         email: email,
         role: 'tenant',
+        mustChangePassword: mustChangePassword,
         properties: properties,
         apartmentId: allApartments.join(', '),
         buildingId: uniqueBuildings.join(', '),

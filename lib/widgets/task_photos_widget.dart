@@ -93,7 +93,7 @@ class TaskPhotosWidget extends StatelessWidget {
                                     height: 90,
                                     width: double.infinity,
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => _errorPlaceholder(),
+                                    errorBuilder: (_, _, _) => _errorPlaceholder(),
                                   ),
                                   if (task.photoUrls!.length > 1)
                                     Positioned(
@@ -102,7 +102,7 @@ class TaskPhotosWidget extends StatelessWidget {
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: Colors.black.withOpacity(0.7),
+                                          color: Colors.black.withValues(alpha: 0.7),
                                           borderRadius: BorderRadius.circular(4),
                                         ),
                                         child: Text(
@@ -171,7 +171,7 @@ class TaskPhotosWidget extends StatelessWidget {
                                   height: 87,
                                   width: double.infinity,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => _errorPlaceholder(),
+                                  errorBuilder: (_, _, _) => _errorPlaceholder(),
                                 ),
                               ),
                             ),
@@ -231,7 +231,7 @@ class TaskPhotosWidget extends StatelessWidget {
                     height: 80,
                     width: 120,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => _errorPlaceholder(),
+                    errorBuilder: (_, _, _) => _errorPlaceholder(),
                   ),
                 ),
               ),
@@ -244,7 +244,7 @@ class TaskPhotosWidget extends StatelessWidget {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: task.photoUrls!.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
               itemBuilder: (context, index) {
                 return GestureDetector(
                   onTap: () {
@@ -265,7 +265,7 @@ class TaskPhotosWidget extends StatelessWidget {
                       width: 65,
                       height: 65,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _errorPlaceholder(),
+                      errorBuilder: (_, _, _) => _errorPlaceholder(),
                     ),
                   ),
                 );
@@ -280,9 +280,9 @@ class TaskPhotosWidget extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: AppColors.statusCompletedBg.withOpacity(0.4),
+              color: AppColors.statusCompletedBg.withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.statusCompletedText.withOpacity(0.3)),
+              border: Border.all(color: AppColors.statusCompletedText.withValues(alpha: 0.3)),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,

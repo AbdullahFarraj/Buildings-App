@@ -109,7 +109,7 @@ class _AdminContractsViewState extends State<AdminContractsView> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryLight.withOpacity(0.2),
+                  color: AppColors.primaryLight.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
@@ -238,7 +238,7 @@ class _AdminContractsViewState extends State<AdminContractsView> {
       child: ListView.separated(
         padding: const EdgeInsets.all(16),
         itemCount: _filteredContracts.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        separatorBuilder: (_, _) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           final contract = _filteredContracts[index];
           return _buildContractCard(contract);
@@ -287,7 +287,7 @@ class _AdminContractsViewState extends State<AdminContractsView> {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: AppColors.primaryLight.withOpacity(0.1),
+                          color: AppColors.primaryLight.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: const Icon(Icons.description_outlined, color: AppColors.primary, size: 20),
@@ -326,7 +326,7 @@ class _AdminContractsViewState extends State<AdminContractsView> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: badgeColor.withOpacity(0.12),
+                    color: badgeColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(

@@ -227,7 +227,7 @@ class _TenantHomeViewState extends State<TenantHomeView> {
         return ListView.separated(
           padding: const EdgeInsets.all(16),
           itemCount: tasks.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          separatorBuilder: (_, _) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
             final task = tasks[index];
             final dateFormat = DateFormat('MMM dd, yyyy - hh:mm a');
@@ -298,9 +298,9 @@ class _TenantHomeViewState extends State<TenantHomeView> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                         decoration: BoxDecoration(
-                          color: AppColors.primaryLight.withOpacity(0.1),
+                          color: AppColors.primaryLight.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppColors.primaryLight.withOpacity(0.3)),
+                          border: Border.all(color: AppColors.primaryLight.withValues(alpha: 0.3)),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -533,7 +533,7 @@ class _CreateRequestFormSheetState extends State<CreateRequestFormSheet> {
   UserModel? _currentUser;
   TenantProperty? _selectedProperty;
   
-  List<XFile> _imageFiles = [];
+  final List<XFile> _imageFiles = [];
   final StorageService _storageService = StorageService();
 
   DateTime? _selectedDate;
@@ -706,7 +706,7 @@ class _CreateRequestFormSheetState extends State<CreateRequestFormSheet> {
             const SizedBox(height: 8),
             if (_currentUser!.allProperties.length > 1) ...[
               DropdownButtonFormField<TenantProperty>(
-                value: _selectedProperty,
+                initialValue: _selectedProperty,
                 decoration: const InputDecoration(
                   labelText: 'Select Property / Unit',
                   prefixIcon: Icon(Icons.apartment, color: AppColors.primary),
@@ -748,7 +748,7 @@ class _CreateRequestFormSheetState extends State<CreateRequestFormSheet> {
               ),
             const SizedBox(height: 24),
             DropdownButtonFormField<String>(
-              value: _selectedCategory,
+              initialValue: _selectedCategory,
               decoration: const InputDecoration(
                 labelText: 'Category',
                 prefixIcon: Icon(Icons.category),

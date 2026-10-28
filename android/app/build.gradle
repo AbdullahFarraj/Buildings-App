@@ -30,6 +30,8 @@ android {
 
     buildTypes {
         release {
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            // When release signing configs are added via key.properties, update this block.
             signingConfig signingConfigs.debug
         }
     }

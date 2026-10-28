@@ -5,12 +5,21 @@ import '../../models/user_model.dart';
 import '../../core/enums/user_role.dart';
 import '../../services/push_notification_service.dart';
 import 'login_view.dart';
+import 'force_password_change_view.dart';
 import '../tenant/tenant_home_view.dart';
 import '../technician/technician_home_view.dart';
 import '../admin/admin_dashboard_view.dart';
 
-class AuthWrapper extends StatelessWidget {
+class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  /// Forces the user document to be re-fetched (e.g. after the password was changed).
+  void _reload() => setState(() {});
 
   @override
   Widget build(BuildContext context) {
@@ -69,6 +78,15 @@ class AuthWrapper extends StatelessWidget {
             // Map data to UserModel
             final userData = userSnapshot.data!.data() as Map<String, dynamic>;
             final userModel = UserModel.fromMap(userData, user.uid);
+
+            // Force replacing the default password (phone number) before using the app
+            if (userData['mustChangePassword'] == true) {
+              return ForcePasswordChangeView(
+                uid: user.uid,
+                phone: userModel.phone,
+                onPasswordChanged: _reload,
+              );
+            }
 
             // Fetch and update FCM token in background
             PushNotificationService.syncUserToken(user.uid);

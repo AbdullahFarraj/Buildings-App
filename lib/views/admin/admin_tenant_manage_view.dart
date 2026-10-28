@@ -116,6 +116,7 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
     if (platformFile != null) {
       // Ask for document name
       final nameController = TextEditingController(text: platformFile.name);
+      if (!mounted) return;
       final confirm = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -380,7 +381,7 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
                         ),
                       ),
                     );
-                  }).toList(),
+                  }),
 
                 const SizedBox(height: 32),
 
@@ -420,7 +421,7 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
           ),
           if (_isLoading)
             Container(
-              color: Colors.black.withOpacity(0.3),
+              color: Colors.black.withValues(alpha: 0.3),
               child: const Center(child: CircularProgressIndicator()),
             ),
         ],

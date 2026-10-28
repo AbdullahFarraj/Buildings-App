@@ -3,7 +3,6 @@ import 'package:cloud_functions/cloud_functions.dart';
 import '../../services/firestore_service.dart';
 import '../../models/user_model.dart';
 import '../../core/theme/app_colors.dart';
-import 'tenant_requests_view.dart';
 
 class AdminTechniciansView extends StatefulWidget {
   const AdminTechniciansView({super.key});
@@ -107,7 +106,7 @@ class _AdminTechniciansViewState extends State<AdminTechniciansView> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: selectedProfession,
+                    initialValue: selectedProfession,
                     decoration: const InputDecoration(labelText: 'Profession'),
                     items: professions.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
                     onChanged: (val) {
@@ -136,13 +135,14 @@ class _AdminTechniciansViewState extends State<AdminTechniciansView> {
                               'phone': phoneController.text.trim(),
                               'profession': selectedProfession,
                             });
-                            if (mounted) {
+                            if (ctx.mounted) {
                               Navigator.pop(ctx);
-                              _fetchTechnicians();
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Technician updated successfully')));
                             }
+                            if (!context.mounted) return;
+                            _fetchTechnicians();
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Technician updated successfully')));
                           } catch (e) {
-                            if (mounted) {
+                            if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
                             }
                             setStateDialog(() => isSubmitting = false);
@@ -221,7 +221,7 @@ class _AdminTechniciansViewState extends State<AdminTechniciansView> {
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         itemCount: _filteredTenants.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        separatorBuilder: (_, _) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           final technician = _filteredTenants[index];
           return Card(
@@ -310,12 +310,12 @@ class _AdminTechniciansViewState extends State<AdminTechniciansView> {
                             if (confirm == true) {
                               try {
                                 await _firestoreService.deleteUser(technician.uid);
-                                if (mounted) {
+                                if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Technician deleted successfully.')));
                                   _fetchTechnicians(); // Refresh list
                                 }
                               } catch (e) {
-                                if (mounted) {
+                                if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
                                 }
                               }
@@ -468,7 +468,7 @@ class _CreateTechnicianSheetState extends State<CreateTechnicianSheet> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _selectedProfession,
+              initialValue: _selectedProfession,
               decoration: const InputDecoration(labelText: 'Profession', prefixIcon: Icon(Icons.build)),
               items: _professions.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
               onChanged: (val) {

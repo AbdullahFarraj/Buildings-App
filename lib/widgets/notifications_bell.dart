@@ -213,7 +213,7 @@ class NotificationsBell extends StatelessWidget {
         }
       },
       child: Container(
-        color: notification.isRead ? Colors.transparent : AppColors.primaryLight.withOpacity(0.08),
+        color: notification.isRead ? Colors.transparent : AppColors.primaryLight.withValues(alpha: 0.08),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -254,7 +254,7 @@ class NotificationsBell extends StatelessWidget {
                   Text(
                     notification.message,
                     style: TextStyle(
-                      color: notification.isRead ? AppColors.textSecondary : AppColors.textPrimary.withOpacity(0.85),
+                      color: notification.isRead ? AppColors.textSecondary : AppColors.textPrimary.withValues(alpha: 0.85),
                       fontSize: 14,
                       height: 1.3,
                     ),
@@ -283,7 +283,7 @@ class NotificationsBell extends StatelessWidget {
 
   Widget _buildNotificationIcon(String title, bool isRead) {
     IconData iconData = Icons.notifications;
-    Color bgColor = isRead ? Colors.grey.shade200 : AppColors.primaryLight.withOpacity(0.2);
+    Color bgColor = isRead ? Colors.grey.shade200 : AppColors.primaryLight.withValues(alpha: 0.2);
     Color iconColor = isRead ? Colors.grey.shade600 : AppColors.primary;
 
     if (title.contains('Chat') || title.contains('Message')) {

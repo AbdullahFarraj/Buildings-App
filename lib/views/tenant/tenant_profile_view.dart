@@ -140,14 +140,14 @@ class _TenantProfileViewState extends State<TenantProfileView> {
                             if (ctx.mounted) {
                               Navigator.pop(ctx);
                             }
-                            if (mounted) {
+                            if (context.mounted) {
                               setState(() {
                                 _userFuture = _firestoreService.getUser(widget.tenantId);
                               });
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated successfully')));
                             }
                           } catch (e) {
-                            if (mounted) {
+                            if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
                             }
                             setStateDialog(() => isSubmitting = false);
