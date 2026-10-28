@@ -699,7 +699,10 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
   }
 
   Future<void> _uploadTenantDocument(UserModel user) async {
-    final platformFile = await FilePicker.pickFile(type: FileType.any);
+    final platformFile = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
+    );
     if (!mounted || platformFile == null) return;
     final nameController = TextEditingController(text: platformFile.name);
 
@@ -1062,13 +1065,13 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                               await FirebaseFirestore.instance
                                   .collection('phone_index')
                                   .doc(sanitized)
-                                  .set({'email': email}, SetOptions(merge: true));
+                                  .set({'email': email, 'uid': user.uid}, SetOptions(merge: true));
 
                               final localPhone = '05${sanitized.substring(4)}';
                               await FirebaseFirestore.instance
                                   .collection('phone_index')
                                   .doc(localPhone)
-                                  .set({'email': email}, SetOptions(merge: true));
+                                  .set({'email': email, 'uid': user.uid}, SetOptions(merge: true));
                             }
 
                             // Note: contract documents are admin-managed (synced from SQL Server)

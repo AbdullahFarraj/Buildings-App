@@ -88,7 +88,10 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
   }
 
   Future<void> _uploadContract() async {
-    final platformFile = await FilePicker.pickFile(type: FileType.any);
+    final platformFile = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+    );
     if (platformFile != null) {
       setState(() => _isLoading = true);
       final ext = platformFile.extension ?? 'pdf';
@@ -112,7 +115,10 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
   }
 
   Future<void> _uploadOtherDocument() async {
-    final platformFile = await FilePicker.pickFile(type: FileType.any);
+    final platformFile = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
+    );
     if (platformFile != null) {
       // Ask for document name
       final nameController = TextEditingController(text: platformFile.name);

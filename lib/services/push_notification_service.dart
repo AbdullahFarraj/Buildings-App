@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../firebase_options.dart';
@@ -15,6 +17,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 class PushNotificationService {
   static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   static bool _initialized = false;
+  static StreamSubscription<String>? _tokenRefreshSub;
 
   /// Initialize listeners and request permissions
   static Future<void> initialize() async {
@@ -82,9 +85,11 @@ class PushNotificationService {
         debugPrint('FCM Token synced for user $userId: ${token.substring(0, 10)}...');
       }
 
-      // Listen for token refreshes
-      _messaging.onTokenRefresh.listen((newToken) async {
+      // Listen for token refreshes without leaking duplicate subscriptions
+      await _tokenRefreshSub?.cancel();
+      _tokenRefreshSub = _messaging.onTokenRefresh.listen((newToken) async {
         try {
+          if (FirebaseAuth.instance.currentUser?.uid != userId) return;
           await FirebaseFirestore.instance.collection('users').doc(userId).update({
             'fcmToken': newToken,
             'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),

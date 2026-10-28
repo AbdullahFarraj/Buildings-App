@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import '../../services/firestore_service.dart';
 import '../../models/user_model.dart';
@@ -130,11 +131,37 @@ class _AdminTechniciansViewState extends State<AdminTechniciansView> {
                           }
                           setStateDialog(() => isSubmitting = true);
                           try {
+                            final newPhone = phoneController.text.trim();
                             await _firestoreService.updateUser(technician.uid, {
                               'name': nameController.text.trim(),
-                              'phone': phoneController.text.trim(),
+                              'phone': newPhone,
                               'profession': selectedProfession,
                             });
+
+                            if (technician.email != null && technician.email!.trim().isNotEmpty) {
+                              final normalizedEmail = technician.email!.trim().toLowerCase();
+                              final cleaned = newPhone.replaceAll(RegExp(r'[\s\-()]'), '');
+                              final variants = <String>{cleaned};
+                              if (cleaned.startsWith('05') && cleaned.length == 10) {
+                                variants.add('971${cleaned.substring(1)}');
+                                variants.add('+971${cleaned.substring(1)}');
+                              } else if (cleaned.startsWith('9715') && cleaned.length == 12) {
+                                variants.add('0${cleaned.substring(3)}');
+                                variants.add('+$cleaned');
+                              } else if (cleaned.startsWith('+9715') && cleaned.length == 13) {
+                                variants.add('0${cleaned.substring(4)}');
+                                variants.add(cleaned.substring(1));
+                              }
+                              for (final v in variants) {
+                                if (v.isNotEmpty) {
+                                  await FirebaseFirestore.instance.collection('phone_index').doc(v).set({
+                                    'email': normalizedEmail,
+                                    'uid': technician.uid,
+                                  });
+                                }
+                              }
+                            }
+
                             if (ctx.mounted) {
                               Navigator.pop(ctx);
                             }

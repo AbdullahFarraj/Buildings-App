@@ -50,17 +50,23 @@ class _TenantProfileViewState extends State<TenantProfileView> {
 
     if (confirm == true) {
       try {
-        // Delete Firestore document
-        await _firestoreService.deleteUser(widget.tenantId);
-        
-        // Try to delete Auth user
+        // 1. Delete Auth user first (requires recent login) so we never delete Firestore data if Auth deletion fails
         if (_auth.currentUser != null) {
           await _auth.currentUser!.delete();
-        } else {
-          await _auth.signOut();
         }
+        // 2. Delete Firestore document (the Cloud Function deleteAuthUser also cleans up if needed)
+        await _firestoreService.deleteUser(widget.tenantId);
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'requires-recent-login') {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Please sign out and sign in again before deleting your account.')),
+            );
+          }
+          return;
+        }
+        await _auth.signOut();
       } catch (e) {
-        // If it throws requires-recent-login or something else, force sign out.
         await _auth.signOut();
       }
     }
@@ -123,17 +129,18 @@ class _TenantProfileViewState extends State<TenantProfileView> {
                             });
 
                             if (user.email != null && user.email!.isNotEmpty && sanitized.isNotEmpty) {
+                              final normalizedEmail = user.email!.trim().toLowerCase();
                               await FirebaseFirestore.instance
                                   .collection('phone_index')
                                   .doc(sanitized)
-                                  .set({'email': user.email}, SetOptions(merge: true));
+                                  .set({'email': normalizedEmail, 'uid': user.uid}, SetOptions(merge: true));
 
                               if (sanitized.startsWith('9715') && sanitized.length == 12) {
                                 final localPhone = '05${sanitized.substring(4)}';
                                 await FirebaseFirestore.instance
                                     .collection('phone_index')
                                     .doc(localPhone)
-                                    .set({'email': user.email}, SetOptions(merge: true));
+                                    .set({'email': normalizedEmail, 'uid': user.uid}, SetOptions(merge: true));
                               }
                             }
 

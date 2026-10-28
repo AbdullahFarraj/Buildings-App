@@ -128,7 +128,8 @@ class _ChatSheetState extends State<ChatSheet> {
 
   void _pickAndUploadFile() async {
     PlatformFile? result = await FilePicker.pickFile(
-      type: FileType.any,
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'pdf', 'doc', 'docx'],
     );
 
     if (result != null) {

@@ -4,9 +4,6 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'services/push_notification_service.dart';
-import 'views/admin/admin_dashboard_view.dart';
-import 'views/tenant/tenant_home_view.dart';
-import 'views/technician/technician_home_view.dart';
 import 'views/splash/splash_view.dart';
 
 void main() async {
@@ -35,17 +32,6 @@ class BuildingApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       home: const SplashView(),
-      routes: {
-        // These are here to support the mock navigation in LoginView until 
-        // real Firebase Auth is wired up into it.
-        '/tenant': (context) {
-          // This is a fallback route for the mock login
-          // We need a tenantId, so we provide a placeholder one
-          return const TenantHomeView(tenantId: 'mock_tenant_id');
-        },
-        '/technician': (context) => const TechnicianHomeView(technicianId: 'mock_technician_id'),
-        '/admin': (context) => const AdminDashboardView(),
-      },
     );
   }
 }

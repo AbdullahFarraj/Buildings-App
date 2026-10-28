@@ -76,25 +76,40 @@ class NotificationService {
 
   /// Send a broadcast notification to all tenants (optionally filtered by building)
   Future<void> sendBroadcastToTenants(String title, String message, {String? buildingId}) async {
-    Query query = _firestore.collection('users').where('role', isEqualTo: 'tenant');
-    if (buildingId != null && buildingId.isNotEmpty && buildingId != 'All Buildings') {
-      query = query.where('buildingId', isEqualTo: buildingId);
+    final snapshot = await _firestore
+        .collection('users')
+        .where('role', isEqualTo: 'tenant')
+        .get();
+
+    final targetDocs = snapshot.docs.where((doc) {
+      if (buildingId == null || buildingId.isEmpty || buildingId == 'All Buildings') {
+        return true;
+      }
+      final data = doc.data();
+      if (data['buildingId'] == buildingId) return true;
+      final props = data['properties'];
+      if (props is List) {
+        return props.any((p) => p is Map && p['buildingName'] == buildingId);
+      }
+      return false;
+    }).toList();
+
+    const int batchLimit = 450;
+    for (var i = 0; i < targetDocs.length; i += batchLimit) {
+      final batch = _firestore.batch();
+      final chunk = targetDocs.skip(i).take(batchLimit);
+      for (var doc in chunk) {
+        final docRef = _notificationsCollection.doc();
+        batch.set(docRef, {
+          'userId': doc.id,
+          'title': title,
+          'message': message,
+          'isRead': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
     }
-    
-    final snapshot = await query.get();
-    
-    final batch = _firestore.batch();
-    for (var doc in snapshot.docs) {
-      final docRef = _notificationsCollection.doc();
-      batch.set(docRef, {
-        'userId': doc.id,
-        'title': title,
-        'message': message,
-        'isRead': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    }
-    await batch.commit();
   }
 
   Future<void> notifyAdmins({

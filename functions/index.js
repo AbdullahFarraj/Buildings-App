@@ -3,10 +3,29 @@ const admin = require("firebase-admin");
 
 admin.initializeApp();
 
+function getPhoneVariants(rawPhone) {
+  if (!rawPhone) return [];
+  const cleaned = String(rawPhone).replace(/[\s\-()]/g, "");
+  if (!cleaned) return [];
+  const variants = new Set([cleaned]);
+  if (cleaned.startsWith("05") && cleaned.length === 10) {
+    variants.add("971" + cleaned.substring(1));
+    variants.add("+971" + cleaned.substring(1));
+  } else if (cleaned.startsWith("9715") && cleaned.length === 12) {
+    variants.add("0" + cleaned.substring(3));
+    variants.add("+" + cleaned);
+  } else if (cleaned.startsWith("+9715") && cleaned.length === 13) {
+    variants.add("0" + cleaned.substring(4));
+    variants.add(cleaned.substring(1));
+  }
+  return Array.from(variants);
+}
+
 exports.deleteAuthUser = functions.firestore
   .document("users/{userId}")
   .onDelete(async (snap, context) => {
     const userId = context.params.userId;
+    const deletedData = snap.data() || {};
     console.log(`Firestore document for user ${userId} was deleted.`);
 
     try {
@@ -18,6 +37,39 @@ exports.deleteAuthUser = functions.firestore
       } else {
         console.error(`Error deleting auth user ${userId}:`, error);
       }
+    }
+
+    // Clean up phone_index entries belonging to this user
+    try {
+      const db = admin.firestore();
+      const batch = db.batch();
+      let hasDeletes = false;
+
+      const byUidSnap = await db.collection("phone_index").where("uid", "==", userId).get();
+      byUidSnap.forEach((doc) => {
+        batch.delete(doc.ref);
+        hasDeletes = true;
+      });
+
+      const phoneVariants = getPhoneVariants(deletedData.phone);
+      for (const variant of phoneVariants) {
+        const ref = db.collection("phone_index").doc(variant);
+        const snapDoc = await ref.get();
+        if (
+          snapDoc.exists &&
+          (snapDoc.data().uid === userId ||
+            (deletedData.email && snapDoc.data().email === String(deletedData.email).trim().toLowerCase()))
+        ) {
+          batch.delete(ref);
+          hasDeletes = true;
+        }
+      }
+
+      if (hasDeletes) {
+        await batch.commit();
+      }
+    } catch (cleanupErr) {
+      console.error(`Error cleaning up phone_index for ${userId}:`, cleanupErr);
     }
   });
 
@@ -48,24 +100,42 @@ exports.createTechnician = functions.https.onCall(async (data, context) => {
     );
   }
 
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const trimmedName = String(name).trim();
+  const trimmedPhone = phone ? String(phone).trim() : '';
+
   try {
     // Create the user in Firebase Auth
     const userRecord = await admin.auth().createUser({
-      email: email,
+      email: normalizedEmail,
       password: password,
-      displayName: name,
-      phoneNumber: phone ? (phone.startsWith('+') ? phone : undefined) : undefined,
+      displayName: trimmedName,
     });
 
+    const db = admin.firestore();
+
     // Save the user data in Firestore
-    await admin.firestore().collection('users').doc(userRecord.uid).set({
-      name: name,
-      email: email,
-      phone: phone || '',
+    await db.collection('users').doc(userRecord.uid).set({
+      name: trimmedName,
+      email: normalizedEmail,
+      phone: trimmedPhone,
       profession: profession || '',
       role: 'technician',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+
+    // Index technician phone variants in phone_index for phone-based login
+    const phoneVariants = getPhoneVariants(trimmedPhone);
+    if (phoneVariants.length > 0) {
+      const batch = db.batch();
+      for (const variant of phoneVariants) {
+        batch.set(db.collection('phone_index').doc(variant), {
+          email: normalizedEmail,
+          uid: userRecord.uid,
+        });
+      }
+      await batch.commit();
+    }
 
     return { success: true, uid: userRecord.uid };
   } catch (error) {

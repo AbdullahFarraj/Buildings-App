@@ -35,10 +35,19 @@ service firebase.storage {
       return request.resource.contentType.matches('image/.*');
     }
 
+    function isAllowedDocumentOrImage() {
+      return request.resource.contentType == null
+          || request.resource.contentType.matches('image/.*')
+          || request.resource.contentType == 'application/pdf'
+          || request.resource.contentType == 'application/msword'
+          || request.resource.contentType == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          || request.resource.contentType == 'application/octet-stream';
+    }
+
     // 1. العقود (contracts) - يرفعها الأدمن ويقرؤها صاحب العقد
     match /contracts/{userId}/{fileName} {
       allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
-      allow write: if isAdmin() && (request.resource == null || isValidSize());
+      allow write: if isAdmin() && (request.resource == null || (isValidSize() && isAllowedDocumentOrImage()));
     }
 
     // 2. مستندات المستأجر الإضافية (documents)
@@ -46,7 +55,7 @@ service firebase.storage {
       allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
       allow write: if isAuthenticated()
                    && (request.auth.uid == userId || isAdmin())
-                   && (request.resource == null || isValidSize());
+                   && (request.resource == null || (isValidSize() && isAllowedDocumentOrImage()));
     }
 
     // 3. صور طلبات الصيانة (tasks) - يرفعها المستأجر في مجلده فقط
@@ -67,7 +76,7 @@ service firebase.storage {
     // 5. مرفقات وصور المحادثات (chats)
     match /chats/{chatId}/{fileName} {
       allow read: if isRegistered();
-      allow create: if isRegistered() && isValidSize();
+      allow create: if isRegistered() && isValidSize() && isAllowedDocumentOrImage();
       allow update, delete: if isAdmin();
     }
 

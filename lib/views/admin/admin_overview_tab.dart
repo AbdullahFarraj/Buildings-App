@@ -478,11 +478,16 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
     final messageController = TextEditingController();
     bool isSending = false;
     
-    // Extract unique buildings from tenants
+    // Extract unique buildings from tenants (including multi-property tenants)
     final Set<String> buildingsSet = {'All Buildings'};
     for (var tenant in _tenants) {
-      if (tenant.buildingId != null && tenant.buildingId!.isNotEmpty) {
-        buildingsSet.add(tenant.buildingId!);
+      if (tenant.buildingId != null && tenant.buildingId!.trim().isNotEmpty) {
+        buildingsSet.add(tenant.buildingId!.trim());
+      }
+      for (var prop in tenant.allProperties) {
+        if (prop.buildingName.trim().isNotEmpty) {
+          buildingsSet.add(prop.buildingName.trim());
+        }
       }
     }
     final List<String> availableBuildings = buildingsSet.toList()..sort();

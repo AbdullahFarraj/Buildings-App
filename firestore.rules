@@ -52,12 +52,13 @@ service cloud.firestore {
       // ولا يستطيع الكتابة فوق رقم مربوط مسبقاً بحساب شخص آخر
       allow create: if isAdmin()
                     || (isRegistered()
-                        && request.resource.data.keys().hasOnly(['email'])
+                        && request.resource.data.keys().hasOnly(['email', 'uid'])
                         && request.resource.data.email == request.auth.token.email);
       allow update: if isAdmin()
                     || (isRegistered()
                         && resource.data.email == request.auth.token.email
-                        && request.resource.data.email == request.auth.token.email);
+                        && request.resource.data.email == request.auth.token.email
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['email', 'uid']));
       allow delete: if isAdmin();
     }
 
@@ -74,8 +75,11 @@ service cloud.firestore {
                   || isTechnician()
                   || (isRegistered() && (resource.data.role == 'admin' || resource.data.role == 'technician'));
 
-      // الإنشاء والحذف: صلاحية الإدارة فقط
-      allow create, delete: if isAdmin();
+      // الإنشاء: صلاحية الإدارة فقط
+      allow create: if isAdmin();
+
+      // الحذف: الإدارة أو صاحب الحساب نفسه (لتمكين ميزة حذف الحساب الذاتي المستوجبة في App Store)
+      allow delete: if isAdmin() || isOwner(userId);
 
       // التعديل:
       // - الأدمن يعدل أي حساب
