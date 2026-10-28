@@ -92,9 +92,12 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
-      # 7. Pre-compile Flutter iOS Release bundle (increments build number automatically)
-      - name: Precompile Flutter iOS
-        run: flutter build ios --release --no-codesign --build-number=${{ github.run_number }}
+      # 7. Configure Flutter iOS Release & CocoaPods (increments build number automatically)
+      - name: Prepare Flutter iOS & Pods
+        run: |
+          flutter build ios --config-only --release --build-number=${{ github.run_number }}
+          cd ios
+          pod install
 
       # 8. Sign and Upload to TestFlight via Fastlane
       - name: Deploy to TestFlight via Fastlane
