@@ -48,16 +48,18 @@ service cloud.firestore {
       allow get: if true;
       allow list: if isAdmin();
 
-      // الكتابة: للأدمن، أو لمستخدم مسجل يربط رقماً بإيميله هو فقط
+      // الكتابة: للأدمن، أو لمستخدم مسجل يربط رقماً بإيميله ومعرفه هو فقط
       // ولا يستطيع الكتابة فوق رقم مربوط مسبقاً بحساب شخص آخر
       allow create: if isAdmin()
                     || (isRegistered()
                         && request.resource.data.keys().hasOnly(['email', 'uid'])
-                        && request.resource.data.email == request.auth.token.email);
+                        && request.resource.data.email == request.auth.token.email
+                        && request.resource.data.get('uid', request.auth.uid) == request.auth.uid);
       allow update: if isAdmin()
                     || (isRegistered()
-                        && resource.data.email == request.auth.token.email
+                        && (resource.data.get('uid', '') == request.auth.uid || resource.data.email == request.auth.token.email)
                         && request.resource.data.email == request.auth.token.email
+                        && request.resource.data.get('uid', request.auth.uid) == request.auth.uid
                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['email', 'uid']));
       allow delete: if isAdmin();
     }

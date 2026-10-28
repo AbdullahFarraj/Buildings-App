@@ -121,28 +121,54 @@ class _TenantProfileViewState extends State<TenantProfileView> {
                               sanitized = '971${digits.substring(1)}';
                             } else if (digits.startsWith('5') && digits.length == 9) {
                               sanitized = '971$digits';
+                            } else if (digits.startsWith('009715') && digits.length == 14) {
+                              sanitized = digits.substring(2);
                             }
 
-                            await _firestoreService.updateUser(user.uid, {
-                              'name': nameController.text.trim(),
-                              'phone': sanitized.isNotEmpty ? sanitized : rawPhone,
-                            });
+                            final authEmail = (_auth.currentUser?.email ?? user.email ?? '').trim().toLowerCase();
 
-                            if (user.email != null && user.email!.isNotEmpty && sanitized.isNotEmpty) {
-                              final normalizedEmail = user.email!.trim().toLowerCase();
+                            // Check if phone number is already claimed by another user
+                            if (sanitized.isNotEmpty) {
+                              final existingIndex = await FirebaseFirestore.instance
+                                  .collection('phone_index')
+                                  .doc(sanitized)
+                                  .get();
+                              if (existingIndex.exists) {
+                                final data = existingIndex.data() ?? {};
+                                final ownerUid = data['uid']?.toString();
+                                final ownerEmail = data['email']?.toString().toLowerCase();
+                                if ((ownerUid != null && ownerUid.isNotEmpty && ownerUid != user.uid) ||
+                                    (ownerUid == null && ownerEmail != null && ownerEmail != authEmail)) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('This phone number is already linked to another account.')),
+                                    );
+                                  }
+                                  setStateDialog(() => isSubmitting = false);
+                                  return;
+                                }
+                              }
+                            }
+
+                            if (authEmail.isNotEmpty && sanitized.isNotEmpty) {
                               await FirebaseFirestore.instance
                                   .collection('phone_index')
                                   .doc(sanitized)
-                                  .set({'email': normalizedEmail, 'uid': user.uid}, SetOptions(merge: true));
+                                  .set({'email': authEmail, 'uid': user.uid}, SetOptions(merge: true));
 
                               if (sanitized.startsWith('9715') && sanitized.length == 12) {
                                 final localPhone = '05${sanitized.substring(4)}';
                                 await FirebaseFirestore.instance
                                     .collection('phone_index')
                                     .doc(localPhone)
-                                    .set({'email': normalizedEmail, 'uid': user.uid}, SetOptions(merge: true));
+                                    .set({'email': authEmail, 'uid': user.uid}, SetOptions(merge: true));
                               }
                             }
+
+                            await _firestoreService.updateUser(user.uid, {
+                              'name': nameController.text.trim(),
+                              'phone': sanitized.isNotEmpty ? sanitized : rawPhone,
+                            });
 
                             if (ctx.mounted) {
                               Navigator.pop(ctx);

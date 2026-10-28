@@ -44,6 +44,14 @@ class MaintenanceTaskModel {
     this.tenantFeedback,
   });
 
+  static DateTime? _parseDate(dynamic val) {
+    if (val == null) return null;
+    if (val is Timestamp) return val.toDate();
+    if (val is DateTime) return val;
+    if (val is String) return DateTime.tryParse(val);
+    return null;
+  }
+
   factory MaintenanceTaskModel.fromMap(Map<String, dynamic> map, String documentId) {
     return MaintenanceTaskModel(
       id: documentId,
@@ -57,13 +65,13 @@ class MaintenanceTaskModel {
       status: TaskStatus.fromString(map['status'] ?? 'pending'),
       technicianId: map['technicianId'],
       technicianName: map['technicianName'],
-      preferredVisitDate: (map['preferredVisitDate'] as Timestamp?)?.toDate(),
+      preferredVisitDate: _parseDate(map['preferredVisitDate']),
       preferredVisitSlot: map['preferredVisitSlot'],
-      createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      completedAt: (map['completedAt'] as Timestamp?)?.toDate(),
+      createdAt: _parseDate(map['createdAt']) ?? DateTime.now(),
+      completedAt: _parseDate(map['completedAt']),
       completionProofUrl: map['completionProofUrl'],
       completionNotes: map['completionNotes'],
-      rating: map['rating'],
+      rating: (map['rating'] as num?)?.toInt(),
       tenantFeedback: map['tenantFeedback'],
     );
   }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import 'package:intl/intl.dart';
 
@@ -34,6 +35,47 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
     _tenant = widget.tenant;
   }
 
+  String _inferContentType(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'pdf':
+        return 'application/pdf';
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      default:
+        return 'application/octet-stream';
+    }
+  }
+
+  Future<void> _openUrl(String? urlString) async {
+    if (urlString == null || urlString.isEmpty) return;
+    final uri = Uri.tryParse(urlString);
+    if (uri == null) return;
+    try {
+      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open document link')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error opening document link')),
+        );
+      }
+    }
+  }
+
   Future<void> _updateDates(bool isStart) async {
     final initialDate = isStart 
         ? (_tenant.contractStartDate ?? DateTime.now()) 
@@ -53,7 +95,10 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
             ? _tenant.copyWith(contractStartDate: picked)
             : _tenant.copyWith(contractEndDate: picked);
             
-        await _firestoreService.updateUser(updatedTenant.uid, updatedTenant.toMap());
+        await _firestoreService.updateUser(updatedTenant.uid, {
+          if (isStart) 'contractStartDate': picked.toIso8601String(),
+          if (!isStart) 'contractEndDate': picked.toIso8601String(),
+        });
         setState(() {
           _tenant = updatedTenant;
           _isLoading = false;
@@ -69,15 +114,16 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
   Future<String?> _uploadPlatformFile(PlatformFile platformFile, String path) async {
     try {
       final ref = FirebaseStorage.instance.ref().child(path);
+      final metadata = SettableMetadata(contentType: _inferContentType(path));
       UploadTask uploadTask;
       if (kIsWeb) {
         final bytes = await platformFile.readAsBytes();
-        uploadTask = ref.putData(bytes);
+        uploadTask = ref.putData(bytes, metadata);
       } else if (platformFile.path != null) {
-        uploadTask = ref.putFile(File(platformFile.path!));
+        uploadTask = ref.putFile(File(platformFile.path!), metadata);
       } else {
         final bytes = await platformFile.readAsBytes();
-        uploadTask = ref.putData(bytes);
+        uploadTask = ref.putData(bytes, metadata);
       }
       final snapshot = await uploadTask;
       return await snapshot.ref.getDownloadURL();
@@ -101,7 +147,7 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
       
       if (url != null) {
         final updatedTenant = _tenant.copyWith(contractUrl: url);
-        await _firestoreService.updateUser(updatedTenant.uid, updatedTenant.toMap());
+        await _firestoreService.updateUser(updatedTenant.uid, {'contractUrl': url});
         setState(() {
           _tenant = updatedTenant;
           _isLoading = false;
@@ -146,12 +192,16 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
         final url = await _uploadPlatformFile(platformFile, 'documents/${_tenant.uid}/$fileName');
         
         if (url != null) {
-          final newDoc = {'name': nameController.text, 'url': url};
+          final newDoc = {
+            'name': nameController.text.trim(),
+            'url': url,
+            'uploadedAt': DateTime.now().toIso8601String(),
+          };
           final currentDocs = List<Map<String, String>>.from(_tenant.documents ?? []);
           currentDocs.add(newDoc);
           
           final updatedTenant = _tenant.copyWith(documents: currentDocs);
-          await _firestoreService.updateUser(updatedTenant.uid, updatedTenant.toMap());
+          await _firestoreService.updateUser(updatedTenant.uid, {'documents': currentDocs});
           setState(() {
             _tenant = updatedTenant;
             _isLoading = false;
@@ -184,7 +234,7 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
       currentDocs.removeAt(index);
       
       final updatedTenant = _tenant.copyWith(documents: currentDocs);
-      await _firestoreService.updateUser(updatedTenant.uid, updatedTenant.toMap());
+      await _firestoreService.updateUser(updatedTenant.uid, {'documents': currentDocs});
       setState(() {
         _tenant = updatedTenant;
         _isLoading = false;
@@ -346,10 +396,22 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
                 Card(
                   child: ListTile(
                     title: const Text('Contract File'),
-                    subtitle: Text(_tenant.contractUrl != null ? 'Contract Uploaded' : 'No contract uploaded'),
-                    trailing: ElevatedButton(
-                      onPressed: _uploadContract,
-                      child: const Text('Upload'),
+                    subtitle: Text(_tenant.contractUrl != null ? 'Contract Uploaded (Tap to view)' : 'No contract uploaded'),
+                    onTap: _tenant.contractUrl != null ? () => _openUrl(_tenant.contractUrl) : null,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_tenant.contractUrl != null)
+                          IconButton(
+                            icon: const Icon(Icons.open_in_new, color: AppColors.primary),
+                            tooltip: 'View Contract',
+                            onPressed: () => _openUrl(_tenant.contractUrl),
+                          ),
+                        ElevatedButton(
+                          onPressed: _uploadContract,
+                          child: const Text('Upload'),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -381,9 +443,22 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
                       child: ListTile(
                         leading: const Icon(Icons.insert_drive_file, color: AppColors.primary),
                         title: Text(doc['name'] ?? 'Document'),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _deleteDocument(index),
+                        onTap: doc['url'] != null ? () => _openUrl(doc['url']) : null,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (doc['url'] != null)
+                              IconButton(
+                                icon: const Icon(Icons.download_rounded, color: AppColors.primary),
+                                tooltip: 'Open / Download',
+                                onPressed: () => _openUrl(doc['url']),
+                              ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              tooltip: 'Delete',
+                              onPressed: () => _deleteDocument(index),
+                            ),
+                          ],
                         ),
                       ),
                     );

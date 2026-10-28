@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:uuid/uuid.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -776,20 +777,34 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
       if (confirm == true && nameController.text.trim().isNotEmpty) {
         setState(() => _isUploadingDoc = true);
         try {
-          final ext = platformFile.extension ?? 'pdf';
+          final ext = (platformFile.extension ?? 'pdf').toLowerCase();
           final fileName = '${const Uuid().v4()}.$ext';
           final storagePath = 'documents/${user.uid}/$fileName';
           final ref = FirebaseStorage.instance.ref().child(storagePath);
 
+          String contentType = 'application/octet-stream';
+          if (ext == 'pdf') {
+            contentType = 'application/pdf';
+          } else if (ext == 'jpg' || ext == 'jpeg') {
+            contentType = 'image/jpeg';
+          } else if (ext == 'png') {
+            contentType = 'image/png';
+          } else if (ext == 'doc') {
+            contentType = 'application/msword';
+          } else if (ext == 'docx') {
+            contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+          }
+          final metadata = SettableMetadata(contentType: contentType);
+
           UploadTask uploadTask;
           if (kIsWeb) {
             final bytes = await platformFile.readAsBytes();
-            uploadTask = ref.putData(bytes);
+            uploadTask = ref.putData(bytes, metadata);
           } else if (platformFile.path != null) {
-            uploadTask = ref.putFile(File(platformFile.path!));
+            uploadTask = ref.putFile(File(platformFile.path!), metadata);
           } else {
             final bytes = await platformFile.readAsBytes();
-            uploadTask = ref.putData(bytes);
+            uploadTask = ref.putData(bytes, metadata);
           }
 
           final snapshot = await uploadTask;
@@ -1053,26 +1068,46 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                           });
 
                           try {
-                            // 1. Update user document in Firestore
-                            await FirebaseFirestore.instance
-                                .collection('users')
-                                .doc(user.uid)
-                                .update({'phone': sanitized});
+                            final authEmail = (FirebaseAuth.instance.currentUser?.email ?? user.email ?? '').trim().toLowerCase();
 
-                            // 2. Update phone_index mappings so login works immediately!
-                            if (user.email != null && user.email!.isNotEmpty) {
-                              final email = user.email!.trim().toLowerCase();
+                            // 1. Check if phone number is already claimed by another user
+                            final existingIndex = await FirebaseFirestore.instance
+                                .collection('phone_index')
+                                .doc(sanitized)
+                                .get();
+                            if (existingIndex.exists) {
+                              final data = existingIndex.data() ?? {};
+                              final ownerUid = data['uid']?.toString();
+                              final ownerEmail = data['email']?.toString().toLowerCase();
+                              if ((ownerUid != null && ownerUid.isNotEmpty && ownerUid != user.uid) ||
+                                  (ownerUid == null && ownerEmail != null && ownerEmail != authEmail)) {
+                                setDialogState(() {
+                                  isSaving = false;
+                                  errorMessage = 'This phone number is already linked to another account.';
+                                });
+                                return;
+                              }
+                            }
+
+                            // 2. Update phone_index mappings first so login works immediately
+                            if (authEmail.isNotEmpty) {
                               await FirebaseFirestore.instance
                                   .collection('phone_index')
                                   .doc(sanitized)
-                                  .set({'email': email, 'uid': user.uid}, SetOptions(merge: true));
+                                  .set({'email': authEmail, 'uid': user.uid}, SetOptions(merge: true));
 
                               final localPhone = '05${sanitized.substring(4)}';
                               await FirebaseFirestore.instance
                                   .collection('phone_index')
                                   .doc(localPhone)
-                                  .set({'email': email, 'uid': user.uid}, SetOptions(merge: true));
+                                  .set({'email': authEmail, 'uid': user.uid}, SetOptions(merge: true));
                             }
+
+                            // 3. Update user document in Firestore
+                            await FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(user.uid)
+                                .update({'phone': sanitized});
 
                             // Note: contract documents are admin-managed (synced from SQL Server)
                             // and must not be modified by tenants.

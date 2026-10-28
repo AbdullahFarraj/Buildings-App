@@ -90,7 +90,8 @@ class UserModel {
       contractEndDate: parseDate(map['contractEndDate']),
       contractUrl: map['contractUrl'],
       documents: (map['documents'] as List<dynamic>?)
-          ?.map((e) => Map<String, String>.from(e))
+          ?.whereType<Map>()
+          .map((e) => e.map((k, v) => MapEntry(k.toString(), (v ?? '').toString())))
           .toList(),
       fcmToken: map['fcmToken'],
       properties: parsedProperties,

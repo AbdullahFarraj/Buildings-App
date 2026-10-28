@@ -19,6 +19,14 @@ class TaskMessageModel {
     required this.createdAt,
   });
 
+  static DateTime _parseDate(dynamic val) {
+    if (val == null) return DateTime.now();
+    if (val is Timestamp) return val.toDate();
+    if (val is DateTime) return val;
+    if (val is String) return DateTime.tryParse(val) ?? DateTime.now();
+    return DateTime.now();
+  }
+
   factory TaskMessageModel.fromMap(Map<String, dynamic> map, String documentId) {
     return TaskMessageModel(
       id: documentId,
@@ -27,9 +35,7 @@ class TaskMessageModel {
       text: map['text'] ?? '',
       fileUrl: map['fileUrl'],
       fileName: map['fileName'],
-      createdAt: map['createdAt'] != null 
-          ? (map['createdAt'] as Timestamp).toDate() 
-          : DateTime.now(),
+      createdAt: _parseDate(map['createdAt']),
     );
   }
 

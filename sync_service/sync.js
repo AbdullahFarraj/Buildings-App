@@ -188,22 +188,40 @@ async function runSync() {
     const userByEmail = new Map();
     const userByName = new Map();
 
+    // Pre-fetch existing Firestore users FIRST so we know which UIDs are admin/technician
+    const firestoreUsersSnap = await db.collection('users').get();
+    const firestoreDataByUid = new Map();
+    const nonTenantUids = new Set();
+    for (const doc of firestoreUsersSnap.docs) {
+      const data = doc.data();
+      firestoreDataByUid.set(doc.id, data);
+      if (data.role === 'admin' || data.role === 'technician') {
+        nonTenantUids.add(doc.id);
+      }
+    }
+
     for (const u of allUsersResult.users) {
+      // Never match a tenant contract onto an Admin or Technician account
+      if (nonTenantUids.has(u.uid)) continue;
       if (u.phoneNumber) userByPhone.set(u.phoneNumber, u);
       if (u.email) userByEmail.set(u.email.toLowerCase(), u);
       if (u.displayName) userByName.set(normalizeTenantName(u.displayName).toLowerCase(), u);
     }
 
-    // Pre-fetch existing Firestore users to map Name -> UID
-    const firestoreUsersSnap = await db.collection('users').get();
-    const firestoreDataByUid = new Map();
-    for (const doc of firestoreUsersSnap.docs) {
-      const data = doc.data();
-      firestoreDataByUid.set(doc.id, data);
+    for (const [docId, data] of firestoreDataByUid.entries()) {
+      if (nonTenantUids.has(docId)) continue;
+      const syntheticUser = { uid: docId, ...data };
+      const sanitizedDocPhone = sanitizeUaeMobile(data.phone);
+      if (sanitizedDocPhone && !userByPhone.has(`+${sanitizedDocPhone}`)) {
+        userByPhone.set(`+${sanitizedDocPhone}`, syntheticUser);
+      }
+      if (data.email && !userByEmail.has(String(data.email).toLowerCase())) {
+        userByEmail.set(String(data.email).toLowerCase(), syntheticUser);
+      }
       if (data.name) {
         const norm = normalizeTenantName(data.name).toLowerCase();
         if (!userByName.has(norm)) {
-          userByName.set(norm, { uid: doc.id, ...data });
+          userByName.set(norm, syntheticUser);
         }
       }
     }
@@ -459,6 +477,7 @@ async function runSync() {
         currentBatch.set(contractRef, contractData, { merge: true });
         currentBatchOps++;
         processedCount++;
+        await commitBatchIfNeeded(false);
       }
 
       // 6. Save unified tenant User document in `users/{uid}`
@@ -466,16 +485,24 @@ async function runSync() {
       const uniqueBuildings = [...new Set(properties.map(p => p.buildingName).filter(Boolean))];
       const allApartments = properties.map(p => p.unitNumber).filter(Boolean);
 
-      // Check if user already changed their password
+      // Check if user already changed their password or updated their phone in the app
       const existingFirestoreUser = firestoreDataByUid.get(uid);
       const mustChangePassword = existingFirestoreUser?.passwordChangedAt ? false : (existingFirestoreUser?.mustChangePassword ?? true);
+      const existingSavedMobile = sanitizeUaeMobile(existingFirestoreUser?.phone);
+      if (existingSavedMobile && !validMobiles.includes(existingSavedMobile)) {
+        validMobiles.push(existingSavedMobile);
+      }
+      const effectivePhone = primaryMobile || existingSavedMobile || (rawPhone ? String(rawPhone).trim() : (existingFirestoreUser?.phone || ''));
+      const effectiveRole = (existingFirestoreUser?.role === 'admin' || existingFirestoreUser?.role === 'technician')
+        ? existingFirestoreUser.role
+        : 'tenant';
 
       const userData = {
         name: group.name,
-        phone: primaryMobile || (rawPhone ? String(rawPhone).trim() : ''),
+        phone: effectivePhone,
         allPhones: validMobiles,
         email: email,
-        role: 'tenant',
+        role: effectiveRole,
         mustChangePassword: mustChangePassword,
         properties: properties,
         apartmentId: allApartments.join(', '),
@@ -491,6 +518,7 @@ async function runSync() {
       };
       currentBatch.set(userRef, userData, { merge: true });
       currentBatchOps++;
+      await commitBatchIfNeeded(false);
 
       // 7. Register ALL tenant phone numbers into `phone_index`
       for (const m of validMobiles) {
@@ -504,6 +532,7 @@ async function runSync() {
           currentBatch.set(localIndexRef, { email: email, uid: uid }, { merge: true });
           currentBatchOps++;
         }
+        await commitBatchIfNeeded(false);
       }
 
       await commitBatchIfNeeded(false);
