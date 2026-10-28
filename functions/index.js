@@ -200,10 +200,19 @@ exports.sendPushNotification = functions.firestore
           },
         },
         apns: {
+          headers: {
+            'apns-priority': '10',
+            'apns-push-type': 'alert',
+          },
           payload: {
             aps: {
+              alert: {
+                title: String(title),
+                body: String(message),
+              },
               sound: 'default',
               badge: 1,
+              'content-available': 1,
             },
           },
         },

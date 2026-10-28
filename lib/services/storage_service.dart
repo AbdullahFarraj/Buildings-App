@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
@@ -32,16 +33,25 @@ class StorageService {
       try {
         final String fileName = _uuid.v4();
         final Reference ref = _storage.ref().child('tasks/$tenantId/$fileName.jpg');
-        final Uint8List bytes = await file.readAsBytes();
-        final UploadTask uploadTask = ref.putData(
-          bytes,
-          SettableMetadata(contentType: 'image/jpeg'),
-        );
+        UploadTask uploadTask;
+        if (!kIsWeb && file.path.isNotEmpty) {
+          uploadTask = ref.putFile(
+            File(file.path),
+            SettableMetadata(contentType: 'image/jpeg'),
+          );
+        } else {
+          final Uint8List bytes = await file.readAsBytes();
+          uploadTask = ref.putData(
+            bytes,
+            SettableMetadata(contentType: 'image/jpeg'),
+          );
+        }
         final TaskSnapshot snapshot = await uploadTask;
         final url = await snapshot.ref.getDownloadURL();
         urls.add(url);
       } catch (e) {
         debugPrint('Error uploading task photo: $e');
+        rethrow;
       }
     }
     return urls;
@@ -52,17 +62,26 @@ class StorageService {
     try {
       final String fileName = 'proof_${_uuid.v4()}';
       final Reference ref = _storage.ref().child('completions/$taskId/$fileName.jpg');
-      final Uint8List bytes = await imageFile.readAsBytes();
-      final UploadTask uploadTask = ref.putData(
-        bytes,
-        SettableMetadata(contentType: 'image/jpeg'),
-      );
+      UploadTask uploadTask;
+      if (!kIsWeb && imageFile.path.isNotEmpty) {
+        uploadTask = ref.putFile(
+          File(imageFile.path),
+          SettableMetadata(contentType: 'image/jpeg'),
+        );
+      } else {
+        final Uint8List bytes = await imageFile.readAsBytes();
+        uploadTask = ref.putData(
+          bytes,
+          SettableMetadata(contentType: 'image/jpeg'),
+        );
+      }
       final TaskSnapshot snapshot = await uploadTask;
       return await snapshot.ref.getDownloadURL();
     } catch (e) {
       debugPrint('Error uploading completion proof: $e');
-      return null;
+      rethrow;
     }
+  }
   }
 
   String _inferContentType(String fileName) {

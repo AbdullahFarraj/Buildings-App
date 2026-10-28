@@ -74,6 +74,17 @@ class PushNotificationService {
           vapidKey: 'BGnIO1ERLemsFNKnTY1llGzc4PC31FmTMM8WfeRn_WprktMZflSSNo1ZXKtLE_COANWPW7tJhOUZ9WBCYp1pZ9s',
         );
       } else {
+        if (defaultTargetPlatform == TargetPlatform.iOS) {
+          // On iOS, APNs token MUST be registered with Apple before fetching FCM token
+          String? apnsToken = await _messaging.getAPNSToken();
+          int retries = 0;
+          while (apnsToken == null && retries < 10) {
+            await Future.delayed(const Duration(seconds: 1));
+            apnsToken = await _messaging.getAPNSToken();
+            retries++;
+          }
+          debugPrint('APNs token status on iOS: ${apnsToken != null ? "Acquired" : "Not set"}');
+        }
         token = await _messaging.getToken();
       }
 
