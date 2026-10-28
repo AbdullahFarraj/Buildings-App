@@ -72,5 +72,7 @@
 	<string>We need access to your photos to attach images of maintenance issues and proof of completion.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>We need permission to save photos to your photo library.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

@@ -376,21 +376,14 @@ class TenantAlertsView extends StatelessWidget {
 
                   if (!context.mounted) return;
 
-                  showModalBottomSheet(
+                  ChatSheet.show(
                     context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (sheetCtx) => Padding(
-                      padding: EdgeInsets.only(bottom: MediaQuery.of(sheetCtx).viewInsets.bottom),
-                      child: ChatSheet(
-                        chatId: targetChatId,
-                        chatTitle: chatTitle,
-                        currentUserId: user.uid,
-                        currentUserName: user.displayName ?? 'Tenant',
-                        isDirectChat: isDirect,
-                        receiverIds: receivers,
-                      ),
-                    ),
+                    chatId: targetChatId,
+                    chatTitle: chatTitle,
+                    currentUserId: user.uid,
+                    currentUserName: user.displayName ?? 'Tenant',
+                    isDirectChat: isDirect,
+                    receiverIds: receivers,
                   );
                 },
                 icon: const Icon(Icons.chat, size: 16),

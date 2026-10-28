@@ -449,24 +449,17 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
                           TextButton.icon(
                             onPressed: () {
                               if (_adminUser == null) return;
-                              showModalBottomSheet(
+                              ChatSheet.show(
                                 context: context,
-                                isScrollControlled: true,
-                                backgroundColor: Colors.transparent,
-                                builder: (context) => Padding(
-                                  padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-                                  child: ChatSheet(
-                                    chatId: task.id,
-                                    chatTitle: task.title,
-                                    currentUserId: _adminUser!.uid,
-                                    currentUserName: _adminUser!.name,
-                                    isDirectChat: false,
-                                    receiverIds: [
-                                      task.tenantId,
-                                      if (task.technicianId != null) task.technicianId!,
-                                    ],
-                                  ),
-                                ),
+                                chatId: task.id,
+                                chatTitle: task.title,
+                                currentUserId: _adminUser!.uid,
+                                currentUserName: _adminUser!.name,
+                                isDirectChat: false,
+                                receiverIds: [
+                                  task.tenantId,
+                                  if (task.technicianId != null) task.technicianId!,
+                                ],
                               );
                             },
                             icon: const Icon(Icons.chat_bubble_outline, size: 18),

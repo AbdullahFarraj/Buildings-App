@@ -389,21 +389,14 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
                             final adminModel = await _firestoreService.getUser(currentAdmin.uid);
                             if (adminModel == null || !context.mounted) return;
 
-                            showModalBottomSheet(
+                            ChatSheet.show(
                               context: context,
-                              isScrollControlled: true,
-                              backgroundColor: Colors.transparent,
-                              builder: (context) => Padding(
-                                padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-                                child: ChatSheet(
-                                  chatId: tenant.uid, // Direct chat between tenant and administration
-                                  chatTitle: tenant.name,
-                                  currentUserId: adminModel.uid,
-                                  currentUserName: adminModel.name,
-                                  isDirectChat: true,
-                                  receiverIds: [tenant.uid],
-                                ),
-                              ),
+                              chatId: tenant.uid, // Direct chat between tenant and administration
+                              chatTitle: tenant.name,
+                              currentUserId: adminModel.uid,
+                              currentUserName: adminModel.name,
+                              isDirectChat: true,
+                              receiverIds: [tenant.uid],
                             );
                           },
                           icon: const Icon(Icons.chat, size: 18),

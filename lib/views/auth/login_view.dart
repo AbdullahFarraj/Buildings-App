@@ -52,11 +52,11 @@ class _LoginViewState extends State<LoginView> {
               emailInput = localDoc.data()!['email'].toString().trim();
             } else {
               // 2. Fallback to standard generated email format
-              emailInput = 'tenant_$fullPhone@elitelivingre.ae';
+              emailInput = '$fullPhone@elitelivingre.ae';
             }
           }
         } catch (_) {
-          emailInput = 'tenant_$fullPhone@elitelivingre.ae';
+          emailInput = '$fullPhone@elitelivingre.ae';
         }
       }
 

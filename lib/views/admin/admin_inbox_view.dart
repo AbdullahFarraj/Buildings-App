@@ -58,21 +58,14 @@ class AdminInboxView extends StatelessWidget {
               onTap: () {
                 final userName = user.displayName ?? 'Admin';
                 
-                showModalBottomSheet(
+                ChatSheet.show(
                   context: context,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.transparent,
-                  builder: (ctx) => Padding(
-                    padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-                    child: ChatSheet(
-                      chatId: chatId,
-                      chatTitle: 'Chat with $lastSenderName',
-                      currentUserId: user.uid,
-                      currentUserName: userName,
-                      isDirectChat: true,
-                      receiverIds: [chatId], // chatId is the tenant ID
-                    ),
-                  ),
+                  chatId: chatId,
+                  chatTitle: 'Chat with $lastSenderName',
+                  currentUserId: user.uid,
+                  currentUserName: userName,
+                  isDirectChat: true,
+                  receiverIds: [chatId], // chatId is the tenant ID
                 );
               },
               borderRadius: BorderRadius.circular(12),

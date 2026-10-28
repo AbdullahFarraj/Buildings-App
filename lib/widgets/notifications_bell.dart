@@ -190,21 +190,14 @@ class NotificationsBell extends StatelessWidget {
 
             if (!context.mounted) return;
 
-            showModalBottomSheet(
+            ChatSheet.show(
               context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.transparent,
-              builder: (ctx) => Padding(
-                padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-                child: ChatSheet(
-                  chatId: targetChatId,
-                  chatTitle: chatTitle,
-                  currentUserId: user.uid,
-                  currentUserName: userName,
-                  isDirectChat: isDirect,
-                  receiverIds: receivers,
-                ),
-              ),
+              chatId: targetChatId,
+              chatTitle: chatTitle,
+              currentUserId: user.uid,
+              currentUserName: userName,
+              isDirectChat: isDirect,
+              receiverIds: receivers,
             );
           } else {
             // General announcement, task update, or document notification

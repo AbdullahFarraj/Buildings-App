@@ -390,21 +390,14 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
   }
 
   void _openChat(UserModel user) {
-    showModalBottomSheet(
+    ChatSheet.show(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-        child: ChatSheet(
-          chatId: user.uid,
-          chatTitle: 'Elite Living Management',
-          currentUserId: user.uid,
-          currentUserName: user.name,
-          isDirectChat: true,
-          receiverIds: const [],
-        ),
-      ),
+      chatId: user.uid,
+      chatTitle: 'Elite Living Management',
+      currentUserId: user.uid,
+      currentUserName: user.name,
+      isDirectChat: true,
+      receiverIds: const [],
     );
   }
 

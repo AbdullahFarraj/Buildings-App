@@ -29,6 +29,31 @@ class ChatSheet extends StatefulWidget {
     this.receiverIds = const [],
   });
 
+  static Future<void> show({
+    required BuildContext context,
+    required String chatId,
+    required String chatTitle,
+    required String currentUserId,
+    required String currentUserName,
+    bool isDirectChat = false,
+    List<String> receiverIds = const [],
+  }) {
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ChatSheet(
+        chatId: chatId,
+        chatTitle: chatTitle,
+        currentUserId: currentUserId,
+        currentUserName: currentUserName,
+        isDirectChat: isDirectChat,
+        receiverIds: receiverIds,
+      ),
+    );
+  }
+
   @override
   State<ChatSheet> createState() => _ChatSheetState();
 }
@@ -170,77 +195,101 @@ class _ChatSheetState extends State<ChatSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.8,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      child: Column(
-        children: [
-          // Header
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
+    final mediaQuery = MediaQuery.of(context);
+    final viewInsetsBottom = mediaQuery.viewInsets.bottom;
+    final safePaddingBottom = mediaQuery.padding.bottom;
+    final topSafe = mediaQuery.padding.top;
+
+    final maxAvailableHeight = mediaQuery.size.height - topSafe - 16;
+    final preferredHeight = mediaQuery.size.height * 0.85;
+    final sheetHeight = preferredHeight.clamp(300.0, maxAvailableHeight);
+
+    return SafeArea(
+      top: true,
+      bottom: false,
+      child: Container(
+        height: sheetHeight,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          children: [
+            // Drag handle pill
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 8, bottom: 4),
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
                 ),
-              ],
+              ),
             ),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-                  color: AppColors.textPrimary,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: () => Navigator.pop(context),
-                ),
-                const SizedBox(width: 12),
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: AppColors.primaryLight,
-                  child: Text(
-                    widget.chatTitle.isNotEmpty ? widget.chatTitle[0].toUpperCase() : 'C',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            // Header
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.chatTitle,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (_headerSubtitle.isNotEmpty)
+                ],
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+                    color: AppColors.textPrimary,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const SizedBox(width: 12),
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: AppColors.primaryLight,
+                    child: Text(
+                      widget.chatTitle.isNotEmpty ? widget.chatTitle[0].toUpperCase() : 'C',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          _headerSubtitle,
+                          widget.chatTitle,
                           style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textHint,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                    ],
+                        if (_headerSubtitle.isNotEmpty)
+                          Text(
+                            _headerSubtitle,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textHint,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
           
           // Chat Background Color
           Expanded(
@@ -273,6 +322,7 @@ class _ChatSheetState extends State<ChatSheet> {
                 return ListView.builder(
                   controller: _scrollController,
                   reverse: true,
+                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                   padding: const EdgeInsets.all(16),
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
@@ -381,8 +431,10 @@ class _ChatSheetState extends State<ChatSheet> {
             padding: EdgeInsets.only(
               left: 16,
               right: 16,
-              top: 12,
-              bottom: MediaQuery.of(context).viewInsets.bottom + 12,
+              top: 10,
+              bottom: viewInsetsBottom > 0
+                  ? viewInsetsBottom + 10
+                  : safePaddingBottom + 10,
             ),
             decoration: BoxDecoration(
               color: Colors.white,

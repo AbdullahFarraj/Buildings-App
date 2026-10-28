@@ -459,23 +459,16 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
                             onPressed: () async {
                               final user = await _firestoreService.getUser(widget.technicianId);
                               if (context.mounted && user != null) {
-                                showModalBottomSheet(
+                                ChatSheet.show(
                                   context: context,
-                                  isScrollControlled: true,
-                                  backgroundColor: Colors.transparent,
-                                  builder: (context) => Padding(
-                                    padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-                                    child: ChatSheet(
-                                      chatId: task.id,
-                                      chatTitle: task.title,
-                                      currentUserId: user.uid,
-                                      currentUserName: user.name,
-                                      isDirectChat: false,
-                                      receiverIds: [
-                                        task.tenantId,
-                                      ],
-                                    ),
-                                  ),
+                                  chatId: task.id,
+                                  chatTitle: task.title,
+                                  currentUserId: user.uid,
+                                  currentUserName: user.name,
+                                  isDirectChat: false,
+                                  receiverIds: [
+                                    task.tenantId,
+                                  ],
                                 );
                               }
                             },
