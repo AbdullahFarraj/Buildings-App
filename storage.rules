@@ -7,14 +7,19 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return isAuthenticated() &&
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
     // 1. العقود (contracts)
     match /contracts/{userId}/{fileName} {
-      allow read, write: if isAuthenticated() && (request.auth.uid == userId || request.auth.token.role == 'admin');
+      allow read, write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
     }
 
     // 2. مستندات المستأجر الإضافية (documents)
     match /documents/{userId}/{fileName} {
-      allow read, write: if isAuthenticated() && (request.auth.uid == userId || request.auth.token.role == 'admin');
+      allow read, write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
     }
 
     // 3. صور طلبات الصيانة (tasks)

@@ -51,10 +51,10 @@ service cloud.firestore {
 
       // التعديل:
       // - الأدمن يعدل أي حساب
-      // - صاحب الحساب يعدل بياناته أو توكن الإشعارات أو يرفع مستندات
+      // - صاحب الحساب يعدل بياناته أو توكن الإشعارات أو يرفع مستندات (مع منعه من تعديل صلاحية الحساب role)
       // - المستأجر يحدث تقييم الفني (averageRating, totalRatings) عند تأكيد الصيانة
       allow update: if isAdmin() 
-                    || isOwner(userId)
+                    || (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']))
                     || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['averageRating', 'totalRatings']));
     }
 
@@ -62,6 +62,11 @@ service cloud.firestore {
     // 2. جدول طلبات الصيانة (tasks)
     // ==========================================
     match /tasks/{taskId} {
+      function isTaskParticipant() {
+        let taskData = get(/databases/$(database)/documents/tasks/$(taskId)).data;
+        return isAuthenticated() && (taskData.tenantId == request.auth.uid || taskData.technicianId == request.auth.uid);
+      }
+
       // القراءة:
       // - الأدمن يرى كل الطلبات
       // - المستأجر يرى طلبات شقته
@@ -92,7 +97,7 @@ service cloud.firestore {
 
       // محادثات ورسائل طلب الصيانة (task messages)
       match /messages/{messageId} {
-        allow read, write: if isAuthenticated();
+        allow read, write: if isAdmin() || isTaskParticipant();
       }
     }
 
