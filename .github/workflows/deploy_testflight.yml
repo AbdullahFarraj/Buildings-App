@@ -49,14 +49,45 @@ jobs:
       - name: Precompile Flutter iOS
         run: flutter build ios --release --no-codesign --build-number=${{ github.run_number }}
 
-      # 7. Sign and Upload to TestFlight via Fastlane
+      # 7. Setup Keychain & Install Apple Distribution Certificate + WWDR CAs
+      - name: Install Apple Certificate and WWDR CA
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+        run: |
+          # 1. Create temporary keychain
+          KEYCHAIN_PATH=$HOME/Library/Keychains/build.keychain-db
+          KEYCHAIN_PASSWORD=temporary_build_password
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -t 3600 -u "$KEYCHAIN_PATH"
+
+          # 2. Download and import Apple Worldwide Developer Relations (WWDR) Intermediate Certificates
+          curl -fSsL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o /tmp/AppleWWDRCAG3.cer
+          curl -fSsL https://www.apple.com/certificateauthority/AppleWWDRCAG6.cer -o /tmp/AppleWWDRCAG6.cer
+          security import /tmp/AppleWWDRCAG3.cer -k "$KEYCHAIN_PATH" -T /usr/bin/codesign
+          security import /tmp/AppleWWDRCAG6.cer -k "$KEYCHAIN_PATH" -T /usr/bin/codesign
+
+          # 3. Decode and import the Distribution Certificate (.p12)
+          echo "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o /tmp/dist_cert.p12
+          security import /tmp/dist_cert.p12 -k "$KEYCHAIN_PATH" -P "$P12_PASSWORD" -T /usr/bin/codesign -A
+
+          # 4. Allow codesign access without popup dialogs
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # 5. Set keychain search list
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+
+          # 6. Verify valid identities
+          security find-identity -v -p codesigning
+
+      # 8. Sign and Upload to TestFlight via Fastlane
       - name: Deploy to TestFlight via Fastlane
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
           APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
-          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
-          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
         run: |
           cd ios
           bundle exec fastlane beta
