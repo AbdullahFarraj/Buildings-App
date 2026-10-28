@@ -100,11 +100,11 @@ service cloud.firestore {
     // 3. جدول المحادثات المباشرة مع الإدارة (direct_chats)
     // ==========================================
     match /direct_chats/{chatId} {
-      // المحادثات المباشرة بين المستخدمين والإدارة
-      allow read, write: if isAuthenticated();
+      // المحادثات المباشرة بين المستأجر (chatId == uid) والإدارة
+      allow read, write: if isAdmin() || (isAuthenticated() && request.auth.uid == chatId);
 
       match /messages/{messageId} {
-        allow read, write: if isAuthenticated();
+        allow read, write: if isAdmin() || (isAuthenticated() && request.auth.uid == chatId);
       }
     }
 

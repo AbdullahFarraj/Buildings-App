@@ -30,6 +30,15 @@ exports.createTechnician = functions.https.onCall(async (data, context) => {
     );
   }
 
+  // 🛡️ Security Check: Ensure caller is an admin
+  const callerDoc = await admin.firestore().collection('users').doc(context.auth.uid).get();
+  if (!callerDoc.exists || callerDoc.data()?.role !== 'admin') {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Only administrators can create technician accounts.'
+    );
+  }
+
   const { name, email, password, phone, profession } = data;
 
   if (!email || !password || !name) {
