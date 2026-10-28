@@ -12,7 +12,7 @@ on:
 jobs:
   build-ios:
     name: Build iOS App (.ipa)
-    runs-on: macos-15 # macOS Sequoia with Xcode 16 & Swift 6 preinstalled
+    runs-on: macos-26
     timeout-minutes: 45
 
     steps:

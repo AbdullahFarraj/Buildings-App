@@ -12,13 +12,23 @@ on:
 jobs:
   deploy-testflight:
     name: Build & Upload to TestFlight
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 60
 
     steps:
       # 1. Checkout repository code
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      # 1.5. Select Xcode 26+ (Required by App Store Connect for iOS 26 SDK)
+      - name: Select Xcode 26+
+        run: |
+          XCODE_26=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1)
+          if [ -n "$XCODE_26" ]; then
+            sudo xcode-select -s "$XCODE_26/Contents/Developer"
+          fi
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
 
       # 2. Setup Keychain & Install Apple Distribution Certificate + WWDR CAs (Fast-fail in 5s)
       - name: Install Apple Certificate and WWDR CA
