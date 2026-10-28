@@ -173,9 +173,16 @@ async function runSync() {
       return name.toString().trim().replace(/\s+/g, ' ');
     }
 
-    // Pre-fetch all Firebase Auth users in 1 call for blazing-fast in-memory lookup
+    // Pre-fetch ALL Firebase Auth users (paginated, 1000 per page) for fast in-memory lookup
     console.log('⏳ جاري تحميل حسابات المستخدمين من Firebase...');
-    const allUsersResult = await auth.listUsers(1000);
+    const allAuthUsers = [];
+    let pageToken;
+    do {
+      const page = await auth.listUsers(1000, pageToken);
+      allAuthUsers.push(...page.users);
+      pageToken = page.pageToken;
+    } while (pageToken);
+    const allUsersResult = { users: allAuthUsers };
     const userByPhone = new Map();
     const userByEmail = new Map();
     const userByName = new Map();
@@ -306,9 +313,9 @@ async function runSync() {
           const needsUpdate = existingUser.displayName !== group.name ||
                               (phoneKey && !existingUser.phoneNumber);
           if (needsUpdate && auth.getUser) {
+            // ⚠️ لا نعيد تعيين كلمة المرور للحسابات الموجودة حتى لا نلغي كلمة المرور التي غيّرها المستأجر
             const updatePayload = {
-              displayName: group.name,
-              password: defaultPassword
+              displayName: group.name
             };
             if (phoneKey && !existingUser.phoneNumber) {
               updatePayload.phoneNumber = phoneKey;

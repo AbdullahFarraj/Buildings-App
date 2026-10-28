@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/theme/app_colors.dart';
-import 'signup_view.dart';
 
 class LoginView extends StatefulWidget {
   const LoginView({super.key});
@@ -208,15 +207,13 @@ class _LoginViewState extends State<LoginView> {
                               : const Text('Sign In'),
                         ),
                       ),
+                      // Self sign-up is disabled: tenant accounts are created by the
+                      // management / sync service only (see firestore.rules).
                       const SizedBox(height: 16),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const SignupView()),
-                          );
-                        },
-                        child: const Text('Don\'t have an account? Sign Up'),
+                      const Text(
+                        'Don\'t have an account? Please contact the management office.',
+                        style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                        textAlign: TextAlign.center,
                       ),
                     ],
                   ),

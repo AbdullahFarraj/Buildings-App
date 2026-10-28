@@ -303,7 +303,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                     label: Text(_isUploadingDoc ? 'Uploading...' : 'Upload File'),
                     style: TextButton.styleFrom(
                       foregroundColor: AppColors.primary,
-                      backgroundColor: AppColors.primaryLight.withOpacity(0.1),
+                      backgroundColor: AppColors.primaryLight.withValues(alpha: 0.1),
                     ),
                   ),
                 ],
@@ -415,7 +415,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
         border: Border.all(color: AppColors.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -439,7 +439,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: AppColors.accent.withOpacity(0.2),
+                    color: AppColors.accent.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(Icons.support_agent_rounded, color: AppColors.accent, size: 26),
@@ -542,8 +542,8 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                           ),
                         ),
                         style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: const Color(0xFF25D366).withOpacity(0.5)),
-                          backgroundColor: const Color(0xFF25D366).withOpacity(0.06),
+                          side: BorderSide(color: const Color(0xFF25D366).withValues(alpha: 0.5)),
+                          backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.06),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
@@ -571,8 +571,8 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                           ),
                         ),
                         style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: const Color(0xFF0284C7).withOpacity(0.5)),
-                          backgroundColor: const Color(0xFF0284C7).withOpacity(0.06),
+                          side: BorderSide(color: const Color(0xFF0284C7).withValues(alpha: 0.5)),
+                          backgroundColor: const Color(0xFF0284C7).withValues(alpha: 0.06),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
@@ -673,7 +673,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
             leading: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppColors.primaryLight.withOpacity(0.2),
+                color: AppColors.primaryLight.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Icons.description, color: AppColors.primary),
@@ -846,7 +846,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
           width: hasValidPhone ? 1 : 1.5,
         ),
       ),
-      color: hasValidPhone ? Colors.white : Colors.amber.shade50.withOpacity(0.5),
+      color: hasValidPhone ? Colors.white : Colors.amber.shade50.withValues(alpha: 0.5),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -858,7 +858,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: hasValidPhone
-                        ? AppColors.primary.withOpacity(0.1)
+                        ? AppColors.primary.withValues(alpha: 0.1)
                         : Colors.amber.shade100,
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -906,7 +906,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                   ),
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    backgroundColor: AppColors.primaryLight.withOpacity(0.15),
+                    backgroundColor: AppColors.primaryLight.withValues(alpha: 0.15),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                 ),
@@ -917,7 +917,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.amber.shade100.withOpacity(0.6),
+                  color: Colors.amber.shade100.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
@@ -975,7 +975,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.1),
+                      color: AppColors.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(Icons.phone_android, color: AppColors.primary),
@@ -1071,19 +1071,13 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                                   .set({'email': email}, SetOptions(merge: true));
                             }
 
-                            // 3. Update contract documents if any exist for this tenant
-                            final contractSnap = await FirebaseFirestore.instance
-                                .collection('contracts')
-                                .where('tenantUid', isEqualTo: user.uid)
-                                .get();
-                            for (var doc in contractSnap.docs) {
-                              await doc.reference.update({'mobileNumber': sanitized});
-                            }
+                            // Note: contract documents are admin-managed (synced from SQL Server)
+                            // and must not be modified by tenants.
 
                             if (dialogCtx.mounted) {
                               Navigator.pop(dialogCtx);
                             }
-                            if (mounted) {
+                            if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   backgroundColor: Colors.green.shade700,

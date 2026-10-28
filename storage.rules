@@ -7,39 +7,73 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    function isAdmin() {
-      return isAuthenticated() &&
-        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    function userRole() {
+      return firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        ? firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('role', '')
+        : '';
     }
 
-    // 1. العقود (contracts)
+    // مستخدم مسجل فعلياً في النظام (له مستند في users)
+    function isRegistered() {
+      return isAuthenticated() && userRole() != '';
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && userRole() == 'admin';
+    }
+
+    function isTechnician() {
+      return isAuthenticated() && userRole() == 'technician';
+    }
+
+    // حد أقصى لحجم الملف: 20 ميغابايت
+    function isValidSize() {
+      return request.resource.size < 20 * 1024 * 1024;
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    // 1. العقود (contracts) - يرفعها الأدمن ويقرؤها صاحب العقد
     match /contracts/{userId}/{fileName} {
-      allow read, write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin() && (request.resource == null || isValidSize());
     }
 
     // 2. مستندات المستأجر الإضافية (documents)
     match /documents/{userId}/{fileName} {
-      allow read, write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAuthenticated()
+                   && (request.auth.uid == userId || isAdmin())
+                   && (request.resource == null || isValidSize());
     }
 
-    // 3. صور طلبات الصيانة (tasks)
+    // 3. صور طلبات الصيانة (tasks) - يرفعها المستأجر في مجلده فقط
     match /tasks/{userId}/{fileName} {
-      allow read, write: if isAuthenticated();
+      allow read: if isRegistered();
+      allow write: if isAuthenticated()
+                   && (request.auth.uid == userId || isAdmin())
+                   && (request.resource == null || (isValidSize() && isImage()));
     }
 
-    // 4. صور إثبات إنجاز الصيانة (completions)
+    // 4. صور إثبات إنجاز الصيانة (completions) - يرفعها الفني أو الأدمن
     match /completions/{taskId}/{fileName} {
-      allow read, write: if isAuthenticated();
+      allow read: if isRegistered();
+      allow write: if (isTechnician() || isAdmin())
+                   && (request.resource == null || (isValidSize() && isImage()));
     }
 
     // 5. مرفقات وصور المحادثات (chats)
     match /chats/{chatId}/{fileName} {
-      allow read, write: if isAuthenticated();
+      allow read: if isRegistered();
+      allow create: if isRegistered() && isValidSize();
+      allow update, delete: if isAdmin();
     }
 
     // إغلاق أي مسارات عشوائية أخرى
     match /{allPaths=**} {
-      allow read: if isAuthenticated();
+      allow read: if isAdmin();
       allow write: if false;
     }
   }
