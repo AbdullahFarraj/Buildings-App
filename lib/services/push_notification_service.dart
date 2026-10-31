@@ -114,4 +114,27 @@ class PushNotificationService {
       debugPrint('Error syncing FCM token for user $userId: $e');
     }
   }
+
+  /// Clears the user's FCM token from Firestore and deletes local token upon logout
+  static Future<void> clearUserToken([String? userId]) async {
+    try {
+      final uid = userId ?? FirebaseAuth.instance.currentUser?.uid;
+      await _tokenRefreshSub?.cancel();
+      _tokenRefreshSub = null;
+
+      if (uid != null) {
+        await FirebaseFirestore.instance.collection('users').doc(uid).update({
+          'fcmToken': FieldValue.delete(),
+          'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
+        });
+        debugPrint('FCM Token deleted from Firestore for user $uid');
+      }
+
+      // Delete the FCM token locally so this device receives zero notifications while logged out
+      await _messaging.deleteToken();
+      debugPrint('Local FCM token deleted successfully');
+    } catch (e) {
+      debugPrint('Error clearing FCM token on logout: $e');
+    }
+  }
 }

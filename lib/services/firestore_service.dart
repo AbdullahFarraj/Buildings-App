@@ -25,6 +25,7 @@ class FirestoreService {
     // Notify Admins
     try {
       await NotificationService().notifyAdmins(
+        senderId: task.tenantId,
         title: 'New Maintenance Request 🔔',
         message: 'A new request "${task.title}" was submitted for Apt ${task.apartmentNumber}.',
         relatedTaskId: docRef.id,
@@ -312,6 +313,7 @@ class FirestoreService {
       if (receiverId.isNotEmpty && receiverId != senderId) {
         await NotificationService().sendNotification(
           userId: receiverId,
+          senderId: senderId,
           title: 'New Message from $senderName 💬',
           message: text.isNotEmpty ? text : 'Sent an attachment',
           relatedTaskId: taskId,
@@ -369,6 +371,7 @@ class FirestoreService {
     if (receiverIds.isEmpty) {
       // If no receivers are specified, it's a message from Tenant to Management
       await NotificationService().notifyAdmins(
+        senderId: senderId,
         title: 'Management Chat - $senderName 💬',
         message: text.isNotEmpty ? text : (fileName != null ? 'Sent an attachment: $fileName' : 'New Message'),
         relatedTaskId: chatId, // Using chatId as related ID so they know who sent it
@@ -378,6 +381,7 @@ class FirestoreService {
         if (receiverId.isNotEmpty && receiverId != senderId) {
           await NotificationService().sendNotification(
             userId: receiverId,
+            senderId: senderId,
             title: 'New Message from $senderName 💬',
             message: text.isNotEmpty ? text : (fileName != null ? 'Sent an attachment: $fileName' : 'New Message'),
             relatedTaskId: chatId,

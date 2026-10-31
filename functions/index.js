@@ -150,12 +150,19 @@ exports.sendPushNotification = functions.firestore
   .onCreate(async (snap, context) => {
     const notification = snap.data();
     const userId = notification.userId;
+    const senderId = notification.senderId;
     const title = notification.title || "Elite Living";
     const message = notification.message || "";
     const relatedTaskId = notification.relatedTaskId || "";
 
     if (!userId) {
       console.log('No user ID found in notification.');
+      return null;
+    }
+
+    // Do not notify the user if they triggered the event themselves
+    if (senderId && senderId === userId) {
+      console.log(`Skipping notification for user ${userId} because senderId equals userId.`);
       return null;
     }
 
@@ -231,5 +238,47 @@ exports.sendPushNotification = functions.firestore
         console.error('Error sending push notification:', error);
       }
     }
+    return null;
+  });
+
+// Automatically clean up duplicate FCM tokens so no two users share the same device token
+exports.onUserTokenUpdated = functions.firestore
+  .document("users/{userId}")
+  .onWrite(async (change, context) => {
+    const userId = context.params.userId;
+    if (!change.after.exists) return null;
+
+    const afterData = change.after.data();
+    const beforeData = change.before.exists ? change.before.data() : null;
+
+    const newToken = afterData ? afterData.fcmToken : null;
+    if (!newToken) return null;
+
+    if (beforeData && beforeData.fcmToken === newToken) return null;
+
+    const db = admin.firestore();
+    const duplicateUsersSnap = await db
+      .collection("users")
+      .where("fcmToken", "==", newToken)
+      .get();
+
+    const batch = db.batch();
+    let count = 0;
+
+    duplicateUsersSnap.forEach((doc) => {
+      if (doc.id !== userId) {
+        batch.update(doc.ref, {
+          fcmToken: admin.firestore.FieldValue.delete(),
+          fcmTokenUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        count++;
+      }
+    });
+
+    if (count > 0) {
+      await batch.commit();
+      console.log(`Unlinked duplicate token from ${count} previous user(s) when claimed by ${userId}`);
+    }
+
     return null;
   });

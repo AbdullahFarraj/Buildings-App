@@ -66,7 +66,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
                       const Text('User profile not found.'),
                       const SizedBox(height: 16),
                       ElevatedButton(
-                        onPressed: () => FirebaseAuth.instance.signOut(),
+                        onPressed: () async {
+                          await PushNotificationService.clearUserToken();
+                          FirebaseAuth.instance.signOut();
+                        },
                         child: const Text('Sign Out'),
                       )
                     ],

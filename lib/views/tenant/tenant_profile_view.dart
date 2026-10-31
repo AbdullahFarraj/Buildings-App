@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/firestore_service.dart';
 import '../../models/user_model.dart';
 import '../../core/theme/app_colors.dart';
+import '../../services/push_notification_service.dart';
 
 class TenantProfileView extends StatefulWidget {
   final String tenantId;
@@ -26,6 +27,7 @@ class _TenantProfileViewState extends State<TenantProfileView> {
   }
 
   void _handleLogout() async {
+    await PushNotificationService.clearUserToken(widget.tenantId);
     await _auth.signOut();
   }
 
@@ -50,6 +52,7 @@ class _TenantProfileViewState extends State<TenantProfileView> {
 
     if (confirm == true) {
       try {
+        await PushNotificationService.clearUserToken(widget.tenantId);
         // 1. Delete Auth user first (requires recent login) so we never delete Firestore data if Auth deletion fails
         if (_auth.currentUser != null) {
           await _auth.currentUser!.delete();
@@ -65,8 +68,10 @@ class _TenantProfileViewState extends State<TenantProfileView> {
           }
           return;
         }
+        await PushNotificationService.clearUserToken(widget.tenantId);
         await _auth.signOut();
       } catch (e) {
+        await PushNotificationService.clearUserToken(widget.tenantId);
         await _auth.signOut();
       }
     }

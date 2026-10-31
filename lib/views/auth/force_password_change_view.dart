@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/theme/app_colors.dart';
+import '../../services/push_notification_service.dart';
 
 /// Shown on first login (or when management flags the account) to force the
 /// user to replace the default password (which is their phone number).
@@ -78,6 +79,7 @@ class _ForcePasswordChangeViewState extends State<ForcePasswordChangeView> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('For security, please sign in again and then change your password.')),
         );
+        await PushNotificationService.clearUserToken();
         await FirebaseAuth.instance.signOut();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -109,7 +111,10 @@ class _ForcePasswordChangeViewState extends State<ForcePasswordChangeView> {
         automaticallyImplyLeading: false,
         actions: [
           TextButton(
-            onPressed: _isSaving ? null : () => FirebaseAuth.instance.signOut(),
+            onPressed: _isSaving ? null : () async {
+              await PushNotificationService.clearUserToken();
+              FirebaseAuth.instance.signOut();
+            },
             child: const Text('Sign Out'),
           ),
         ],

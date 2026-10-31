@@ -59,13 +59,18 @@ class NotificationService {
   /// Send a notification to a specific user
   Future<void> sendNotification({
     required String userId,
+    String? senderId,
     required String title,
     required String message,
     String? relatedTaskId,
   }) async {
+    // Never notify the user if they triggered the action themselves
+    if (senderId != null && senderId == userId) return;
+
     final notification = NotificationModel(
       id: '',
       userId: userId,
+      senderId: senderId,
       title: title,
       message: message,
       createdAt: DateTime.now(),
@@ -113,6 +118,7 @@ class NotificationService {
   }
 
   Future<void> notifyAdmins({
+    String? senderId,
     required String title,
     required String message,
     String? relatedTaskId,
@@ -126,9 +132,13 @@ class NotificationService {
 
       final batch = _firestore.batch();
       for (var doc in adminsSnapshot.docs) {
+        // Never send an admin notification to the admin who triggered the action
+        if (senderId != null && doc.id == senderId) continue;
+
         final docRef = _notificationsCollection.doc();
         batch.set(docRef, {
           'userId': doc.id,
+          if (senderId != null) 'senderId': senderId,
           'title': title,
           'message': message,
           'isRead': false,

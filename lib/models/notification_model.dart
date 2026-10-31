@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class NotificationModel {
   final String id;
   final String userId; // The recipient of the notification
+  final String? senderId; // The sender/creator of the action
   final String title;
   final String message;
   final bool isRead;
@@ -12,6 +13,7 @@ class NotificationModel {
   NotificationModel({
     required this.id,
     required this.userId,
+    this.senderId,
     required this.title,
     required this.message,
     this.isRead = false,
@@ -23,6 +25,7 @@ class NotificationModel {
     return NotificationModel(
       id: documentId,
       userId: map['userId'] ?? '',
+      senderId: map['senderId'],
       title: map['title'] ?? '',
       message: map['message'] ?? '',
       isRead: map['isRead'] ?? false,
@@ -42,6 +45,7 @@ class NotificationModel {
   Map<String, dynamic> toMap() {
     return {
       'userId': userId,
+      if (senderId != null) 'senderId': senderId,
       'title': title,
       'message': message,
       'isRead': isRead,

@@ -21,6 +21,7 @@ import '../../widgets/app_notification_toast.dart';
 import '../../widgets/task_photos_widget.dart';
 import '../../utils/contact_helper.dart';
 import '../shared/chat_sheet.dart';
+import '../../services/push_notification_service.dart';
 
 class AdminDashboardView extends StatefulWidget {
   const AdminDashboardView({super.key});
@@ -220,6 +221,7 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
   }
 
   void _handleLogout() async {
+    await PushNotificationService.clearUserToken(_auth.currentUser?.uid);
     await _auth.signOut();
   }
 

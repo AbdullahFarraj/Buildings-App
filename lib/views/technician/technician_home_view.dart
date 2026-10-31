@@ -19,6 +19,7 @@ import 'dart:io';
 import '../../widgets/notifications_bell.dart';
 import '../../utils/contact_helper.dart';
 import '../shared/chat_sheet.dart';
+import '../../services/push_notification_service.dart';
 
 class TechnicianHomeView extends StatefulWidget {
   final String technicianId;
@@ -251,6 +252,7 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
             icon: const Icon(Icons.logout),
             tooltip: 'Logout',
             onPressed: () async {
+              await PushNotificationService.clearUserToken(widget.technicianId);
               await FirebaseAuth.instance.signOut();
             },
           ),
