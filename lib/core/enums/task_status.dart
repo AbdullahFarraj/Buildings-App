@@ -2,6 +2,7 @@ enum TaskStatus {
   pending('pending'),
   assigned('assigned'),
   inProgress('inProgress'),
+  onHold('onHold'),
   waitingConfirmation('waitingConfirmation'),
   completed('completed'),
   rejected('rejected');

@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 import '../../models/user_model.dart';
 import '../../services/firestore_service.dart';
 import '../../core/theme/app_colors.dart';
+import 'admin_tenant_details_view.dart';
 
 class AdminTenantManageView extends StatefulWidget {
   final UserModel tenant;
@@ -278,6 +279,20 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Manage ${_tenant.name}'),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => AdminTenantDetailsView(tenant: _tenant),
+                ),
+              );
+            },
+            icon: const Icon(Icons.receipt_long, color: AppColors.primary),
+            label: const Text('الشيكات والعقود', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
       body: Stack(
         children: [

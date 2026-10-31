@@ -264,5 +264,17 @@ service cloud.firestore {
       // التعديل والإنشاء والحذف: للإدارة فقط
       allow write: if isAdmin();
     }
+
+    // ==========================================
+    // 6. جدول الشيكات ومواعيد الدفع (cheques)
+    // ==========================================
+    match /cheques/{chequeId} {
+      // القراءة: الأدمن يرى كل الشيكات، والمستأجر يرى شيكاته هو فقط
+      allow read: if isAdmin()
+                  || (isAuthenticated() && resource.data.tenantUid == request.auth.uid);
+
+      // الإنشاء والتعديل والحذف: للإدارة فقط
+      allow write: if isAdmin();
+    }
   }
 }

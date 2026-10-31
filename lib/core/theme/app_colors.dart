@@ -29,6 +29,9 @@ class AppColors {
   static const Color statusInProgressBg = Color(0xFFDBEAFE); // Blue 50
   static const Color statusInProgressText = Color(0xFF1D4ED8); // Blue 700
 
+  static const Color statusOnHoldBg = Color(0xFFFFEDD5); // Orange 100
+  static const Color statusOnHoldText = Color(0xFFC2410C); // Orange 700
+
   static const Color statusCompletedBg = Color(0xFFD1FAE5); // Emerald 50
   static const Color statusCompletedText = Color(0xFF047857); // Emerald 700
 

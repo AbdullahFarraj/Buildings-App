@@ -29,6 +29,11 @@ class StatusBadge extends StatelessWidget {
         textColor = AppColors.statusInProgressText;
         label = 'In Progress';
         break;
+      case TaskStatus.onHold:
+        bgColor = AppColors.statusOnHoldBg;
+        textColor = AppColors.statusOnHoldText;
+        label = 'On Hold (Materials)';
+        break;
       case TaskStatus.waitingConfirmation:
         bgColor = AppColors.statusPendingBg;
         textColor = AppColors.statusPendingText;

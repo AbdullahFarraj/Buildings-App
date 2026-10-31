@@ -11,6 +11,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/firestore_service.dart';
 import '../../services/notification_service.dart';
 import '../../models/user_model.dart';
+import '../../models/cheque_model.dart';
 import '../../core/theme/app_colors.dart';
 import '../../utils/contact_helper.dart';
 import '../shared/chat_sheet.dart';
@@ -212,6 +213,12 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
               _buildContactManagementCard(user),
               const SizedBox(height: 32),
 
+              // Rent Cheques & Payment Schedule
+              _buildSectionTitle('Rent Cheques & Payment Dates (شيكات الإيجار ومواعيد الدفع)'),
+              const SizedBox(height: 12),
+              _buildTenantChequesSection(user),
+              const SizedBox(height: 32),
+
               // Lease & Contract Cards for each property
               _buildSectionTitle('Lease & Contract Details'),
               const SizedBox(height: 12),
@@ -328,6 +335,302 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
         fontWeight: FontWeight.bold,
         color: AppColors.textPrimary,
       ),
+    );
+  }
+
+  Widget _buildTenantChequesSection(UserModel user) {
+    final currencyFormat = NumberFormat('#,##0.##');
+    final dateFormat = DateFormat('dd MMM yyyy');
+
+    return StreamBuilder<List<ChequeModel>>(
+      stream: _firestoreService.getChequesByTenantStream(widget.tenantId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()));
+        }
+
+        final cheques = snapshot.data ?? [];
+        final totalCount = cheques.length;
+        final totalAmount = cheques.fold<double>(0, (sum, c) => sum + c.amount);
+        final paidAmount = cheques.where((c) => c.isPaid).fold<double>(0, (sum, c) => sum + c.amount);
+        final pendingAmount = cheques.where((c) => !c.isPaid && !c.isCancelled).fold<double>(0, (sum, c) => sum + c.amount);
+
+        // Nearest upcoming check
+        ChequeModel? nextDue;
+        final unpaid = cheques.where((c) => !c.isPaid && !c.isCancelled).toList();
+        if (unpaid.isNotEmpty) {
+          unpaid.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+          nextDue = unpaid.first;
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Next Due Check Highlight Banner
+            if (nextDue != null) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: nextDue.isOverdue 
+                        ? [Colors.red.shade700, Colors.red.shade900]
+                        : [AppColors.primary, AppColors.primaryLight],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (nextDue.isOverdue ? Colors.red : AppColors.primary).withValues(alpha: 0.25),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.alarm, color: Colors.white, size: 22),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                nextDue.isOverdue ? 'دفعة متأخرة / Overdue Payment' : 'الدفعة القادمة وموعد الاستحقاق / Next Due Cheque',
+                                style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                '${currencyFormat.format(nextDue.amount)} AED',
+                                style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            nextDue.isOverdue
+                                ? 'متأخر ${-nextDue.daysUntilDue} يوم'
+                                : (nextDue.daysUntilDue == 0 ? 'مستحق اليوم' : 'بعد ${nextDue.daysUntilDue} يوم'),
+                            style: TextStyle(
+                              color: nextDue.isOverdue ? Colors.red.shade900 : AppColors.primary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Divider(color: Colors.white24, height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '📅 وقت الدفع: ${dateFormat.format(nextDue.dueDate)}',
+                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                        ),
+                        Text(
+                          'شيك #${nextDue.chequeNumber} (${nextDue.bankName})',
+                          style: const TextStyle(color: Colors.white70, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            // Cheques Summary Pill Stats
+            if (cheques.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        children: [
+                          const Text('إجمالي الشيكات', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                          const SizedBox(height: 2),
+                          Text('$totalCount شيك', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.primary)),
+                        ],
+                      ),
+                    ),
+                    Container(width: 1, height: 30, color: Colors.grey.shade300),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          const Text('المدفوع', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                          const SizedBox(height: 2),
+                          Text('${currencyFormat.format(paidAmount)} د.إ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.green)),
+                        ],
+                      ),
+                    ),
+                    Container(width: 1, height: 30, color: Colors.grey.shade300),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          const Text('المتبقي للدفع', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                          const SizedBox(height: 2),
+                          Text('${currencyFormat.format(pendingAmount)} د.إ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.amber.shade900)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // Cheques List Cards
+            if (cheques.isEmpty)
+              Card(
+                elevation: 0,
+                color: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: const BorderSide(color: AppColors.border),
+                ),
+                child: const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      Icon(Icons.payment_outlined, size: 40, color: Colors.grey),
+                      SizedBox(height: 8),
+                      Text(
+                        'لا توجد شيكات مسجلة حالياً',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'ستظهر شيكات الإيجار ومواعيد استحقاق الدفع هنا فور تسجيلها من قبل الإدارة.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              ...cheques.map((c) {
+                Color statusColor = c.isPaid ? Colors.green : (c.isOverdue ? Colors.red : Colors.blueGrey);
+                String statusLabel = c.isPaid ? 'تم الصرف ✅' : (c.isOverdue ? 'متأخر ⚠️' : 'قيد الانتظار ⏳');
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: Card(
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      side: BorderSide(color: c.isOverdue ? Colors.red.shade300 : AppColors.border),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 18,
+                                backgroundColor: statusColor.withValues(alpha: 0.1),
+                                child: Icon(Icons.account_balance, size: 18, color: statusColor),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      c.bankName,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    ),
+                                    Text(
+                                      'شيك #${c.chequeNumber}',
+                                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                                ),
+                                child: Text(
+                                  statusLabel,
+                                  style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 11),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 20),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('المبلغ', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                  Text(
+                                    '${currencyFormat.format(c.amount)} د.إ',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color: c.isPaid ? Colors.green.shade700 : AppColors.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  const Text('وقت وتاريخ الاستحقاق للدفع', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.calendar_today, size: 13, color: AppColors.accent),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        dateFormat.format(c.dueDate),
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          if (c.notes != null && c.notes!.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text('ملاحظة: ${c.notes!}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }),
+          ],
+        );
+      },
     );
   }
 

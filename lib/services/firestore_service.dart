@@ -4,6 +4,7 @@ import '../models/maintenance_task_model.dart';
 import '../models/task_message_model.dart';
 import '../models/user_model.dart';
 import '../models/contract_model.dart';
+import '../models/cheque_model.dart';
 import '../core/enums/task_status.dart';
 import '../core/enums/user_role.dart';
 import 'notification_service.dart';
@@ -156,6 +157,149 @@ class FirestoreService {
           );
         }
       }
+    } else if (status == TaskStatus.inProgress) {
+      final doc = await _tasksCollection.doc(taskId).get();
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data() as Map<String, dynamic>;
+        final tenantId = data['tenantId'];
+        final title = data['title'] ?? 'your request';
+        if (tenantId != null) {
+          await NotificationService().sendNotification(
+            userId: tenantId,
+            title: 'Work In Progress 🛠️',
+            message: 'Technician has started working on "$title".',
+            relatedTaskId: taskId,
+          );
+        }
+      }
+    }
+  }
+
+  /// Puts a task on hold due to waiting for materials
+  Future<void> holdTaskForMaterials({
+    required String taskId,
+    required String reason,
+    String? technicianName,
+  }) async {
+    await _tasksCollection.doc(taskId).update({
+      'status': TaskStatus.onHold.value,
+      'holdReason': reason,
+    });
+
+    final task = await getTask(taskId);
+    if (task != null) {
+      if (task.tenantId.isNotEmpty) {
+        await NotificationService().sendNotification(
+          userId: task.tenantId,
+          title: 'Request On Hold ⏸️',
+          message: 'Your request "${task.title}" is on hold: waiting to purchase materials ($reason).',
+          relatedTaskId: taskId,
+        );
+      }
+      await NotificationService().notifyAdmins(
+        title: 'Task On Hold (Materials) ⏸️',
+        message: '${technicianName ?? task.technicianName ?? "Technician"} put request "${task.title}" (Apt ${task.apartmentNumber}) on hold: $reason',
+        relatedTaskId: taskId,
+      );
+    }
+  }
+
+  /// Resumes a task that was on hold
+  Future<void> resumeTask({
+    required String taskId,
+    String? technicianName,
+  }) async {
+    await _tasksCollection.doc(taskId).update({
+      'status': TaskStatus.inProgress.value,
+    });
+
+    final task = await getTask(taskId);
+    if (task != null) {
+      if (task.tenantId.isNotEmpty) {
+        await NotificationService().sendNotification(
+          userId: task.tenantId,
+          title: 'Work Resumed ▶️',
+          message: 'Technician has resumed work on "${task.title}".',
+          relatedTaskId: taskId,
+        );
+      }
+      await NotificationService().notifyAdmins(
+        title: 'Work Resumed ▶️',
+        message: '${technicianName ?? task.technicianName ?? "Technician"} resumed work on "${task.title}".',
+        relatedTaskId: taskId,
+      );
+    }
+  }
+
+  /// Reschedules a task to a new date and time slot
+  Future<void> rescheduleTask({
+    required String taskId,
+    required DateTime newDate,
+    required String newSlot,
+    required String rescheduledByRole, // 'technician' or 'tenant'
+  }) async {
+    await _tasksCollection.doc(taskId).update({
+      'preferredVisitDate': Timestamp.fromDate(newDate),
+      'preferredVisitSlot': newSlot,
+      'rescheduledBy': rescheduledByRole,
+      'rescheduledAt': FieldValue.serverTimestamp(),
+    });
+
+    final task = await getTask(taskId);
+    if (task == null) return;
+
+    final dateFormatted = '${newDate.day}/${newDate.month}/${newDate.year}';
+    final slotClean = newSlot.contains(':') ? newSlot.split(':').first : newSlot;
+
+    if (rescheduledByRole == 'technician') {
+      if (task.tenantId.isNotEmpty) {
+        await NotificationService().sendNotification(
+          userId: task.tenantId,
+          title: 'Visit Rescheduled 📅',
+          message: 'Technician rescheduled visit for "${task.title}" to $dateFormatted ($slotClean).',
+          relatedTaskId: taskId,
+        );
+      }
+      await NotificationService().notifyAdmins(
+        title: 'Visit Rescheduled by Tech 📅',
+        message: '${task.technicianName ?? "Technician"} rescheduled "${task.title}" (Apt ${task.apartmentNumber}) to $dateFormatted ($slotClean).',
+        relatedTaskId: taskId,
+      );
+    } else {
+      if (task.technicianId != null && task.technicianId!.isNotEmpty) {
+        await NotificationService().sendNotification(
+          userId: task.technicianId!,
+          title: 'Visit Rescheduled by Tenant 📅',
+          message: 'Tenant rescheduled visit for "${task.title}" (Apt ${task.apartmentNumber}) to $dateFormatted ($slotClean).',
+          relatedTaskId: taskId,
+        );
+      }
+      await NotificationService().notifyAdmins(
+        title: 'Visit Rescheduled by Tenant 📅',
+        message: 'Tenant rescheduled "${task.title}" (Apt ${task.apartmentNumber}) to $dateFormatted ($slotClean).',
+        relatedTaskId: taskId,
+      );
+    }
+  }
+
+  /// Rejects a maintenance request
+  Future<void> rejectTask({
+    required String taskId,
+    required String reason,
+  }) async {
+    await _tasksCollection.doc(taskId).update({
+      'status': TaskStatus.rejected.value,
+      'rejectionReason': reason,
+    });
+
+    final task = await getTask(taskId);
+    if (task != null && task.tenantId.isNotEmpty) {
+      await NotificationService().sendNotification(
+        userId: task.tenantId,
+        title: 'Request Rejected ❌',
+        message: 'Your maintenance request "${task.title}" was rejected: $reason',
+        relatedTaskId: taskId,
+      );
     }
   }
 
@@ -163,6 +307,31 @@ class FirestoreService {
   Future<void> submitTenantRating(String taskId, String technicianId, int rating, String? feedback) async {
     // 1. Update Task (Always do this first to ensure status changes)
     await _tasksCollection.doc(taskId).update({
+      'status': TaskStatus.completed.value,
+      'rating': rating,
+      'tenantFeedback': feedback,
+      'completedAt': FieldValue.serverTimestamp(),
+    });
+
+    // Notify technician & admin
+    try {
+      final task = await getTask(taskId);
+      if (task != null) {
+        if (technicianId.isNotEmpty) {
+          await NotificationService().sendNotification(
+            userId: technicianId,
+            title: 'Task Confirmed & Rated ⭐',
+            message: 'Tenant rated your work $rating/5 on "${task.title}".',
+            relatedTaskId: taskId,
+          );
+        }
+        await NotificationService().notifyAdmins(
+          title: 'Task Confirmed ⭐',
+          message: 'Apt ${task.apartmentNumber} confirmed task "${task.title}" (Rating: $rating/5).',
+          relatedTaskId: taskId,
+        );
+      }
+    } catch (_) {}
       'status': TaskStatus.completed.value,
       'rating': rating,
       'tenantFeedback': feedback,
@@ -416,5 +585,93 @@ class FirestoreService {
         }
       }
     }
+  }
+
+  // --- Cheques & Payment Dates ---
+
+  CollectionReference get _chequesCollection => _firestore.collection('cheques');
+
+  /// Stream of cheques for a specific tenant, sorted by due date
+  Stream<List<ChequeModel>> getChequesByTenantStream(String tenantUid) {
+    return _chequesCollection
+        .where('tenantUid', isEqualTo: tenantUid)
+        .snapshots()
+        .map((snapshot) {
+      final list = snapshot.docs.map((doc) => ChequeModel.fromFirestore(doc)).toList();
+      list.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+      return list;
+    });
+  }
+
+  /// Future list of cheques for a specific tenant
+  Future<List<ChequeModel>> getChequesByTenant(String tenantUid) async {
+    final snapshot = await _chequesCollection
+        .where('tenantUid', isEqualTo: tenantUid)
+        .get();
+    final list = snapshot.docs.map((doc) => ChequeModel.fromFirestore(doc)).toList();
+    list.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+    return list;
+  }
+
+  /// Stream of all cheques (for Admin)
+  Stream<List<ChequeModel>> getAllChequesStream() {
+    return _chequesCollection
+        .snapshots()
+        .map((snapshot) {
+      final list = snapshot.docs.map((doc) => ChequeModel.fromFirestore(doc)).toList();
+      list.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+      return list;
+    });
+  }
+
+  /// Future list of all cheques (for Admin)
+  Future<List<ChequeModel>> getAllCheques() async {
+    final snapshot = await _chequesCollection.get();
+    final list = snapshot.docs.map((doc) => ChequeModel.fromFirestore(doc)).toList();
+    list.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+    return list;
+  }
+
+  /// Add a new cheque
+  Future<String> addCheque(ChequeModel cheque) async {
+    final docRef = await _chequesCollection.add(cheque.toMap());
+    return docRef.id;
+  }
+
+  /// Update cheque fields (amount, dueDate, status, notes, etc.)
+  Future<void> updateCheque(String chequeId, Map<String, dynamic> data) async {
+    final updateData = Map<String, dynamic>.from(data);
+    updateData['updatedAt'] = FieldValue.serverTimestamp();
+    await _chequesCollection.doc(chequeId).update(updateData);
+  }
+
+  /// Delete a cheque
+  Future<void> deleteCheque(String chequeId) async {
+    await _chequesCollection.doc(chequeId).delete();
+  }
+
+  /// Batch add multiple cheques (useful when generating installments)
+  Future<void> batchCreateCheques(List<ChequeModel> cheques) async {
+    final batch = _firestore.batch();
+    for (final c in cheques) {
+      final docRef = _chequesCollection.doc();
+      batch.set(docRef, c.toMap());
+    }
+    await batch.commit();
+  }
+
+  /// Get all contracts belonging to a specific tenant
+  Future<List<ContractModel>> getContractsByTenant(String tenantUid) async {
+    final snapshot = await _firestore
+        .collection('contracts')
+        .where('tenantUid', isEqualTo: tenantUid)
+        .get();
+    final list = snapshot.docs.map((doc) => ContractModel.fromFirestore(doc)).toList();
+    list.sort((a, b) {
+      if (a.endDate == null) return 1;
+      if (b.endDate == null) return -1;
+      return a.endDate!.compareTo(b.endDate!);
+    });
+    return list;
   }
 }

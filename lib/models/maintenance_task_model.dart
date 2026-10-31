@@ -21,6 +21,10 @@ class MaintenanceTaskModel {
   final String? completionNotes;
   final int? rating;
   final String? tenantFeedback;
+  final String? holdReason;
+  final String? rejectionReason;
+  final String? rescheduledBy; // 'technician' or 'tenant'
+  final DateTime? rescheduledAt;
 
   MaintenanceTaskModel({
     required this.id,
@@ -42,6 +46,10 @@ class MaintenanceTaskModel {
     this.completionNotes,
     this.rating,
     this.tenantFeedback,
+    this.holdReason,
+    this.rejectionReason,
+    this.rescheduledBy,
+    this.rescheduledAt,
   });
 
   static DateTime? _parseDate(dynamic val) {
@@ -73,6 +81,10 @@ class MaintenanceTaskModel {
       completionNotes: map['completionNotes'],
       rating: (map['rating'] as num?)?.toInt(),
       tenantFeedback: map['tenantFeedback'],
+      holdReason: map['holdReason'],
+      rejectionReason: map['rejectionReason'],
+      rescheduledBy: map['rescheduledBy'],
+      rescheduledAt: _parseDate(map['rescheduledAt']),
     );
   }
 
@@ -96,6 +108,10 @@ class MaintenanceTaskModel {
       'completionNotes': completionNotes,
       'rating': rating,
       'tenantFeedback': tenantFeedback,
+      'holdReason': holdReason,
+      'rejectionReason': rejectionReason,
+      'rescheduledBy': rescheduledBy,
+      'rescheduledAt': rescheduledAt != null ? Timestamp.fromDate(rescheduledAt!) : null,
     };
   }
 
@@ -119,6 +135,10 @@ class MaintenanceTaskModel {
     String? completionNotes,
     int? rating,
     String? tenantFeedback,
+    String? holdReason,
+    String? rejectionReason,
+    String? rescheduledBy,
+    DateTime? rescheduledAt,
   }) {
     return MaintenanceTaskModel(
       id: id ?? this.id,
@@ -140,6 +160,10 @@ class MaintenanceTaskModel {
       completionNotes: completionNotes ?? this.completionNotes,
       rating: rating ?? this.rating,
       tenantFeedback: tenantFeedback ?? this.tenantFeedback,
+      holdReason: holdReason ?? this.holdReason,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
+      rescheduledBy: rescheduledBy ?? this.rescheduledBy,
+      rescheduledAt: rescheduledAt ?? this.rescheduledAt,
     );
   }
 }
