@@ -39,8 +39,10 @@ class PushNotificationService {
       debugPrint('FCM permission status: ${settings.authorizationStatus}');
 
       // 2. Set presentation options for foreground messages (iOS & web)
+      // We set alert: false so it doesn't show an intrusive native popup while the app is active;
+      // instead, our sleek AppNotificationToast floating pill displays non-intrusively.
       await _messaging.setForegroundNotificationPresentationOptions(
-        alert: true,
+        alert: false,
         badge: true,
         sound: true,
       );

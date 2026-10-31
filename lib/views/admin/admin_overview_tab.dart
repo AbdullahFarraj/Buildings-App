@@ -7,7 +7,6 @@ import '../../core/theme/app_colors.dart';
 import '../../core/enums/task_status.dart';
 import '../../services/notification_service.dart';
 import 'admin_contracts_view.dart';
-import 'admin_all_cheques_view.dart';
 
 class AdminOverviewTab extends StatefulWidget {
   final FirestoreService firestoreService;
@@ -30,7 +29,6 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
   List<MaintenanceTaskModel> _recentTasks = [];
   int _activeRequests = 0;
   int _contractsCount = 0;
-  int _chequesCount = 0;
   StreamSubscription<List<MaintenanceTaskModel>>? _tasksSub;
 
   @override
@@ -57,7 +55,6 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
     List<UserModel> tenants = [];
     List<UserModel> technicians = [];
     int contractsCount = 0;
-    int chequesCount = 0;
     List<MaintenanceTaskModel> recentTasks = [];
     int activeRequests = 0;
 
@@ -80,13 +77,6 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
     }
 
     try {
-      final allCheques = await widget.firestoreService.getAllCheques();
-      chequesCount = allCheques.length;
-    } catch (e) {
-      debugPrint('Error loading cheques count: $e');
-    }
-
-    try {
       final tasksStream = widget.firestoreService.getAllTasksForAdmin();
       final tasksList = await tasksStream.first;
       recentTasks = tasksList.take(5).toList();
@@ -100,7 +90,6 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
         _tenants = tenants;
         _technicians = technicians;
         _contractsCount = contractsCount;
-        _chequesCount = chequesCount;
         _recentTasks = recentTasks;
         _activeRequests = activeRequests;
         _isLoading = false;
@@ -227,25 +216,6 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
                 Icons.handyman,
                 Colors.teal,
                 onTap: () => widget.onNavigate(3),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildStatCard(
-                'شيكات الإيجار / Cheques',
-                _chequesCount > 0 ? '$_chequesCount شيك' : 'عرض الشيكات',
-                Icons.payment,
-                const Color(0xFF00B894),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const AdminAllChequesView()),
-                  );
-                },
               ),
             ),
           ],

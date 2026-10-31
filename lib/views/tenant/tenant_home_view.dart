@@ -10,6 +10,7 @@ import '../../models/user_model.dart';
 import '../../widgets/skeleton_loader.dart';
 import '../../widgets/status_badge.dart';
 import '../../core/enums/task_status.dart';
+import '../../core/enums/user_role.dart';
 import '../../core/theme/app_colors.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
@@ -17,6 +18,7 @@ import '../../services/storage_service.dart';
 import '../../widgets/notifications_bell.dart';
 import '../../widgets/app_notification_toast.dart';
 import '../../widgets/task_photos_widget.dart';
+import '../../widgets/maintenance_task_card.dart';
 import 'tenant_profile_view.dart';
 import 'tenant_alerts_view.dart';
 import 'tenant_dashboard_view.dart';
@@ -200,6 +202,27 @@ class _TenantHomeViewState extends State<TenantHomeView> {
     );
   }
 
+  void _handleTenantReschedule(MaintenanceTaskModel task) {
+    MaintenanceTaskCard.showRescheduleSheet(
+      context: context,
+      task: task,
+      roleLabel: 'tenant',
+      onConfirm: (newDate, newSlot) async {
+        await _firestoreService.rescheduleTask(
+          taskId: task.id,
+          newDate: newDate,
+          newSlot: newSlot,
+          rescheduledByRole: 'tenant',
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Visit rescheduled successfully / تم تعديل الموعد بنجاح')),
+          );
+        }
+      },
+    );
+  }
+
   Widget _buildRequestsView() {
     return StreamBuilder<List<MaintenanceTaskModel>>(
       stream: _firestoreService.getTasksByTenant(widget.tenantId),
@@ -227,210 +250,66 @@ class _TenantHomeViewState extends State<TenantHomeView> {
         return ListView.separated(
           padding: const EdgeInsets.all(16),
           itemCount: tasks.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 12),
+          separatorBuilder: (_, _) => const SizedBox(height: 14),
           itemBuilder: (context, index) {
             final task = tasks[index];
-            final dateFormat = DateFormat('MMM dd, yyyy - hh:mm a');
-            final formattedDate = dateFormat.format(task.createdAt);
 
-            return Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: const BorderSide(color: AppColors.border, width: 1),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '${task.buildingId ?? 'Building'} - Apt ${task.apartmentNumber}',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        StatusBadge(status: task.status),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        const Icon(Icons.category, size: 16, color: AppColors.textSecondary),
-                        const SizedBox(width: 4),
-                        Text(
-                          task.category,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      task.description,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        const Icon(Icons.access_time, size: 16, color: AppColors.textHint),
-                        const SizedBox(width: 4),
-                        Text(
-                          formattedDate,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppColors.textHint,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (task.preferredVisitDate != null && task.preferredVisitSlot != null) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryLight.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppColors.primaryLight.withValues(alpha: 0.3)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.calendar_month, size: 16, color: AppColors.primary),
-                            const SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                'Visit: ${DateFormat('MMM d, yyyy').format(task.preferredVisitDate!)} (${task.preferredVisitSlot!.split(':').first})',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
+            return MaintenanceTaskCard(
+              task: task,
+              userRole: UserRole.tenant,
+              onRescheduleTap: () => _handleTenantReschedule(task),
+              onConfirmTap: () => _showRatingDialog(task),
+              onCancelTap: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Cancel Request'),
+                    content: const Text('Are you sure you want to cancel this maintenance request?'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('Yes', style: TextStyle(color: Colors.red)),
                       ),
                     ],
-                    if (task.technicianName != null && task.technicianName!.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          const Icon(Icons.person_outline, size: 16, color: AppColors.primary),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              'Assigned to: ${task.technicianName}',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          if (task.technicianId != null)
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.phone, color: AppColors.primary, size: 20),
-                                  onPressed: () async {
-                                    final tech = await _firestoreService.getUser(task.technicianId!);
-                                    if (tech != null) ContactHelper.launchCall(tech.phone);
-                                  },
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                ),
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  icon: const Icon(Icons.chat, color: Colors.green, size: 20),
-                                  onPressed: () async {
-                                    final tech = await _firestoreService.getUser(task.technicianId!);
-                                    if (tech != null) ContactHelper.launchWhatsApp(tech.phone);
-                                  },
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                ),
-                              ],
-                            ),
-                        ],
-                      ),
+                  ),
+                );
+                if (confirm == true) {
+                  await _firestoreService.deleteTask(task.id);
+                }
+              },
+              onCommentsTap: () async {
+                final user = await _firestoreService.getUser(widget.tenantId);
+                if (context.mounted && user != null) {
+                  ChatSheet.show(
+                    context: context,
+                    chatId: task.id,
+                    chatTitle: task.title,
+                    currentUserId: user.uid,
+                    currentUserName: user.name,
+                    isDirectChat: false,
+                    receiverIds: [
+                      if (task.technicianId != null && task.technicianId != user.uid) task.technicianId!,
                     ],
-                    TaskPhotosWidget(task: task),
-                    if (task.status != TaskStatus.completed && task.status != TaskStatus.rejected) ...[
-                      const SizedBox(height: 12),
-                      const Divider(),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          TextButton.icon(
-                            onPressed: () async {
-                              final user = await _firestoreService.getUser(widget.tenantId);
-                              if (context.mounted && user != null) {
-                                ChatSheet.show(
-                                  context: context,
-                                  chatId: task.id,
-                                  chatTitle: task.title,
-                                  currentUserId: user.uid,
-                                  currentUserName: user.name,
-                                  isDirectChat: false,
-                                  receiverIds: [
-                                    if (task.technicianId != null && task.technicianId != user.uid) task.technicianId!,
-                                  ],
-                                );
-                              }
-                            },
-                            icon: const Icon(Icons.chat_bubble_outline, size: 18),
-                            label: const Text('Comments'),
-                          ),
-                          const Spacer(),
-                          if (task.status == TaskStatus.pending)
-                            TextButton.icon(
-                              onPressed: () async {
-                                // Show confirmation dialog before deleting
-                                final confirm = await showDialog<bool>(
-                                  context: context,
-                                  builder: (ctx) => AlertDialog(
-                                    title: const Text('Cancel Request'),
-                                    content: const Text('Are you sure you want to cancel this maintenance request?'),
-                                    actions: [
-                                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
-                                      TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Yes', style: TextStyle(color: Colors.red))),
-                                    ],
-                                  ),
-                                );
-                                if (confirm == true) {
-                                  await _firestoreService.deleteTask(task.id);
-                                }
-                              },
-                              icon: const Icon(Icons.delete_outline, size: 18),
-                              label: const Text('Cancel'),
-                              style: TextButton.styleFrom(foregroundColor: AppColors.statusRejectedText),
-                            ),
-                          if (task.status == TaskStatus.waitingConfirmation) const SizedBox(width: 8),
-                          if (task.status == TaskStatus.waitingConfirmation)
-                            TextButton.icon(
-                              onPressed: () {
-                                _showRatingDialog(task);
-                              },
-                              icon: const Icon(Icons.check_circle_outline, size: 18),
-                              label: const Text('Confirm Completion'),
-                              style: TextButton.styleFrom(foregroundColor: AppColors.statusCompletedText),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
+                  );
+                }
+              },
+              onCallTechnician: task.technicianId != null
+                  ? () async {
+                      final tech = await _firestoreService.getUser(task.technicianId!);
+                      if (tech != null && tech.phone.isNotEmpty) {
+                        ContactHelper.launchCall(tech.phone);
+                      }
+                    }
+                  : null,
+              onWhatsAppTechnician: task.technicianId != null
+                  ? () async {
+                      final tech = await _firestoreService.getUser(task.technicianId!);
+                      if (tech != null && tech.phone.isNotEmpty) {
+                        ContactHelper.launchWhatsApp(tech.phone);
+                      }
+                    }
+                  : null,
             );
           },
         );

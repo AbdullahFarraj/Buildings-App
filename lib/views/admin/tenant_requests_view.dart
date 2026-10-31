@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../../services/firestore_service.dart';
 import '../../models/maintenance_task_model.dart';
 import '../../widgets/skeleton_loader.dart';
-import '../../widgets/status_badge.dart';
+import '../../core/enums/user_role.dart';
 import '../../core/theme/app_colors.dart';
+import '../../widgets/maintenance_task_card.dart';
 
 class TenantRequestsView extends StatelessWidget {
   final String tenantId;
@@ -52,59 +52,13 @@ class TenantRequestsView extends StatelessWidget {
           return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: tasks.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 12),
+            separatorBuilder: (_, _) => const SizedBox(height: 14),
             itemBuilder: (context, index) {
               final task = tasks[index];
-              final dateFormat = DateFormat('MMM dd, yyyy - hh:mm a');
-              final formattedDate = dateFormat.format(task.createdAt);
 
-              return Card(
-                elevation: 2,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: const BorderSide(color: AppColors.border, width: 1),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              task.category,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          StatusBadge(status: task.status),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        task.description,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          const Icon(Icons.access_time, size: 16, color: AppColors.textHint),
-                          const SizedBox(width: 4),
-                          Text(
-                            formattedDate,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppColors.textHint,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+              return MaintenanceTaskCard(
+                task: task,
+                userRole: UserRole.admin,
               );
             },
           );

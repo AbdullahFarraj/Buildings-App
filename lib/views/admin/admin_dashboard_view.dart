@@ -10,7 +10,9 @@ import '../../services/notification_service.dart';
 import '../../widgets/skeleton_loader.dart';
 import '../../widgets/status_badge.dart';
 import '../../core/enums/task_status.dart';
+import '../../core/enums/user_role.dart';
 import '../../core/theme/app_colors.dart';
+import '../../widgets/maintenance_task_card.dart';
 
 import 'admin_tenants_view.dart';
 import 'admin_technicians_view.dart';
@@ -41,8 +43,10 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
     'Pending',
     'Assigned',
     'In Progress',
+    'On Hold',
     'Waiting Confirmation',
     'Completed',
+    'Rejected',
   ];
   
   UserModel? _adminUser;
@@ -232,6 +236,57 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
     await _auth.signOut();
   }
 
+  void _handleAdminReject(MaintenanceTaskModel task) {
+    MaintenanceTaskCard.showRejectDialog(
+      context: context,
+      task: task,
+      onConfirm: (reason) async {
+        await _firestoreService.rejectTask(taskId: task.id, reason: reason);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Request rejected successfully / تم رفض الطلب بنجاح')),
+          );
+        }
+      },
+    );
+  }
+
+  void _handleAdminDelete(MaintenanceTaskModel task) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Request'),
+        content: const Text('Are you sure you want to delete this maintenance request?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Yes', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await _firestoreService.deleteTask(task.id);
+    }
+  }
+
+  void _openChat(MaintenanceTaskModel task) {
+    if (_adminUser == null) return;
+    ChatSheet.show(
+      context: context,
+      chatId: task.id,
+      chatTitle: task.title,
+      currentUserId: _adminUser!.uid,
+      currentUserName: _adminUser!.name,
+      isDirectChat: false,
+      receiverIds: [
+        task.tenantId,
+        if (task.technicianId != null) task.technicianId!,
+      ],
+    );
+  }
+
   Widget _buildRequestsView() {
     return StreamBuilder<List<MaintenanceTaskModel>>(
       stream: _firestoreService.getAllTasksForAdmin(),
@@ -252,8 +307,10 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
             'Pending': TaskStatus.pending,
             'Assigned': TaskStatus.assigned,
             'In Progress': TaskStatus.inProgress,
+            'On Hold': TaskStatus.onHold,
             'Waiting Confirmation': TaskStatus.waitingConfirmation,
             'Completed': TaskStatus.completed,
+            'Rejected': TaskStatus.rejected,
           };
           final targetStatus = statusMap[_selectedFilter];
           tasks = tasks.where((t) => t.status == targetStatus).toList();
@@ -271,216 +328,38 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
         return ListView.separated(
           padding: const EdgeInsets.all(16),
           itemCount: tasks.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 12),
+          separatorBuilder: (_, _) => const SizedBox(height: 14),
           itemBuilder: (context, index) {
             final task = tasks[index];
-            final dateFormat = DateFormat('MMM dd, yyyy - hh:mm a');
-            final formattedDate = dateFormat.format(task.createdAt);
 
-            return Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: const BorderSide(color: AppColors.border, width: 1),
-              ),
-              child: InkWell(
-                onTap: (task.status == TaskStatus.pending || task.status == TaskStatus.assigned)
-                    ? () => _showAssignBottomSheet(context, task)
-                    : null,
-                borderRadius: BorderRadius.circular(12),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    '${task.buildingId ?? 'Building'} - Apt ${task.apartmentNumber}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.info_outline, color: AppColors.primary, size: 20),
-                                  onPressed: () => _showTenantDetails(context, task.tenantId),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                  tooltip: 'Tenant Details',
-                                ),
-                              ],
-                            ),
-                          ),
-                          StatusBadge(status: task.status),
-                          const SizedBox(width: 8),
-                          IconButton(
-                            onPressed: () async {
-                              final confirm = await showDialog<bool>(
-                                context: context,
-                                builder: (ctx) => AlertDialog(
-                                  title: const Text('Delete Request'),
-                                  content: const Text('Are you sure you want to delete this maintenance request?'),
-                                  actions: [
-                                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
-                                    TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Yes', style: TextStyle(color: Colors.red))),
-                                  ],
-                                ),
-                              );
-                              if (confirm == true) {
-                                await _firestoreService.deleteTask(task.id);
-                              }
-                            },
-                            icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                            tooltip: 'Delete Request',
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        task.title,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          const Icon(Icons.category, size: 16, color: AppColors.textSecondary),
-                          const SizedBox(width: 4),
-                          Text(
-                            task.category,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppColors.textSecondary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        task.description,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          const Icon(Icons.access_time, size: 16, color: AppColors.textHint),
-                          const SizedBox(width: 4),
-                          Text(
-                            formattedDate,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppColors.textHint,
-                            ),
-                          ),
-                      ],
-                      ),
-                      if (task.preferredVisitDate != null && task.preferredVisitSlot != null) ...[
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryLight.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: AppColors.primaryLight.withValues(alpha: 0.3)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.calendar_month, size: 16, color: AppColors.primary),
-                              const SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  'Visit: ${DateFormat('MMM d, yyyy').format(task.preferredVisitDate!)} (${task.preferredVisitSlot!.split(':').first})',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: AppColors.primary,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                      if (task.technicianName != null && task.technicianName!.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            const Icon(Icons.person_outline, size: 16, color: AppColors.primary),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Assigned to: ${task.technicianName}',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                      TaskPhotosWidget(task: task),
-                      if (task.status == TaskStatus.pending || task.status == TaskStatus.assigned) ...[
-                        const SizedBox(height: 12),
-                        const Divider(),
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.assignment_ind, size: 18, color: AppColors.primary),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  task.status == TaskStatus.pending ? 'Tap to assign technician' : 'Tap to reassign technician',
-                                  style: const TextStyle(
-                                    color: AppColors.primary,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      const Divider(),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          TextButton.icon(
-                            onPressed: () {
-                              if (_adminUser == null) return;
-                              ChatSheet.show(
-                                context: context,
-                                chatId: task.id,
-                                chatTitle: task.title,
-                                currentUserId: _adminUser!.uid,
-                                currentUserName: _adminUser!.name,
-                                isDirectChat: false,
-                                receiverIds: [
-                                  task.tenantId,
-                                  if (task.technicianId != null) task.technicianId!,
-                                ],
-                              );
-                            },
-                            icon: const Icon(Icons.chat_bubble_outline, size: 18),
-                            label: const Text('Comments'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+            return MaintenanceTaskCard(
+              task: task,
+              userRole: UserRole.admin,
+              onTap: (task.status == TaskStatus.pending ||
+                      task.status == TaskStatus.assigned ||
+                      task.status == TaskStatus.onHold)
+                  ? () => _showAssignBottomSheet(context, task)
+                  : null,
+              onRejectTap: () => _handleAdminReject(task),
+              onDeleteTap: () => _handleAdminDelete(task),
+              onTenantInfoTap: () => _showTenantDetails(context, task.tenantId),
+              onCommentsTap: () => _openChat(task),
+              onCallTechnician: task.technicianId != null
+                  ? () async {
+                      final tech = await _firestoreService.getUser(task.technicianId!);
+                      if (tech != null && tech.phone.isNotEmpty) {
+                        ContactHelper.launchCall(tech.phone);
+                      }
+                    }
+                  : null,
+              onWhatsAppTechnician: task.technicianId != null
+                  ? () async {
+                      final tech = await _firestoreService.getUser(task.technicianId!);
+                      if (tech != null && tech.phone.isNotEmpty) {
+                        ContactHelper.launchWhatsApp(tech.phone);
+                      }
+                    }
+                  : null,
             );
           },
         );
