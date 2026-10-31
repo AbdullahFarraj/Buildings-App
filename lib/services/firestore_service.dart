@@ -332,11 +332,6 @@ class FirestoreService {
         );
       }
     } catch (_) {}
-      'status': TaskStatus.completed.value,
-      'rating': rating,
-      'tenantFeedback': feedback,
-      'completedAt': FieldValue.serverTimestamp(),
-    });
 
     // 2. Update Technician stats (Wrap in try-catch in case of permission issues)
     try {

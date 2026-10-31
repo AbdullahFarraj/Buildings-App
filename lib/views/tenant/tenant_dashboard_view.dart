@@ -351,9 +351,8 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
 
         final cheques = snapshot.data ?? [];
         final totalCount = cheques.length;
-        final totalAmount = cheques.fold<double>(0, (sum, c) => sum + c.amount);
-        final paidAmount = cheques.where((c) => c.isPaid).fold<double>(0, (sum, c) => sum + c.amount);
-        final pendingAmount = cheques.where((c) => !c.isPaid && !c.isCancelled).fold<double>(0, (sum, c) => sum + c.amount);
+        final paidAmount = cheques.where((c) => c.isPaid).fold<double>(0, (acc, c) => acc + c.amount);
+        final pendingAmount = cheques.where((c) => !c.isPaid && !c.isCancelled).fold<double>(0, (acc, c) => acc + c.amount);
 
         // Nearest upcoming check
         ChequeModel? nextDue;
@@ -490,7 +489,10 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                         children: [
                           const Text('المتبقي للدفع', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
                           const SizedBox(height: 2),
-                          Text('${currencyFormat.format(pendingAmount)} د.إ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.amber.shade900)),
+                          Text(
+                            '${currencyFormat.format(pendingAmount)} د.إ',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.amber.shade900),
+                          ),
                         ],
                       ),
                     ),

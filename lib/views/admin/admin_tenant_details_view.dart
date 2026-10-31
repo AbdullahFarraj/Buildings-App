@@ -335,9 +335,6 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
     
     DateTime selectedDate = cheque.dueDate;
     String selectedStatus = cheque.status;
-    String? selectedBuilding = cheque.buildingName;
-    String? selectedUnit = cheque.unitNumber;
-    String? selectedContractCode = cheque.contractCode;
 
     showDialog(
       context: context,
@@ -858,7 +855,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
           IconButton(
             icon: const Icon(Icons.phone, color: Colors.blue),
             tooltip: 'Call Phone',
-            onPressed: () => ContactHelper.launchPhoneCall(_tenant.phone),
+            onPressed: () => ContactHelper.launchCall(_tenant.phone),
           ),
           IconButton(
             icon: const Icon(Icons.chat, color: Colors.green),
@@ -935,9 +932,9 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
 
         // Calculate statistics
         final totalCount = allCheques.length;
-        final totalAmount = allCheques.fold<double>(0, (sum, c) => sum + c.amount);
-        final paidAmount = allCheques.where((c) => c.isPaid).fold<double>(0, (sum, c) => sum + c.amount);
-        final pendingAmount = allCheques.where((c) => !c.isPaid && !c.isCancelled).fold<double>(0, (sum, c) => sum + c.amount);
+        final totalAmount = allCheques.fold<double>(0, (acc, c) => acc + c.amount);
+        final paidAmount = allCheques.where((c) => c.isPaid).fold<double>(0, (acc, c) => acc + c.amount);
+        final pendingAmount = allCheques.where((c) => !c.isPaid && !c.isCancelled).fold<double>(0, (acc, c) => acc + c.amount);
         final overdueCount = allCheques.where((c) => c.isOverdue).length;
 
         // Find nearest upcoming or overdue check
