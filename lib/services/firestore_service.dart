@@ -4,6 +4,7 @@ import '../models/maintenance_task_model.dart';
 import '../models/task_message_model.dart';
 import '../models/user_model.dart';
 import '../models/contract_model.dart';
+import '../models/cheque_model.dart';
 import '../core/enums/task_status.dart';
 import '../core/enums/user_role.dart';
 import 'notification_service.dart';
@@ -331,11 +332,6 @@ class FirestoreService {
         );
       }
     } catch (_) {}
-      'status': TaskStatus.completed.value,
-      'rating': rating,
-      'tenantFeedback': feedback,
-      'completedAt': FieldValue.serverTimestamp(),
-    });
 
     // 2. Update Technician stats (Wrap in try-catch in case of permission issues)
     try {
@@ -584,5 +580,93 @@ class FirestoreService {
         }
       }
     }
+  }
+
+  // --- Cheques & Payment Dates ---
+
+  CollectionReference get _chequesCollection => _firestore.collection('cheques');
+
+  /// Stream of cheques for a specific tenant, sorted by due date
+  Stream<List<ChequeModel>> getChequesByTenantStream(String tenantUid) {
+    return _chequesCollection
+        .where('tenantUid', isEqualTo: tenantUid)
+        .snapshots()
+        .map((snapshot) {
+      final list = snapshot.docs.map((doc) => ChequeModel.fromFirestore(doc)).toList();
+      list.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+      return list;
+    });
+  }
+
+  /// Future list of cheques for a specific tenant
+  Future<List<ChequeModel>> getChequesByTenant(String tenantUid) async {
+    final snapshot = await _chequesCollection
+        .where('tenantUid', isEqualTo: tenantUid)
+        .get();
+    final list = snapshot.docs.map((doc) => ChequeModel.fromFirestore(doc)).toList();
+    list.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+    return list;
+  }
+
+  /// Stream of all cheques (for Admin)
+  Stream<List<ChequeModel>> getAllChequesStream() {
+    return _chequesCollection
+        .snapshots()
+        .map((snapshot) {
+      final list = snapshot.docs.map((doc) => ChequeModel.fromFirestore(doc)).toList();
+      list.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+      return list;
+    });
+  }
+
+  /// Future list of all cheques (for Admin)
+  Future<List<ChequeModel>> getAllCheques() async {
+    final snapshot = await _chequesCollection.get();
+    final list = snapshot.docs.map((doc) => ChequeModel.fromFirestore(doc)).toList();
+    list.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+    return list;
+  }
+
+  /// Add a new cheque
+  Future<String> addCheque(ChequeModel cheque) async {
+    final docRef = await _chequesCollection.add(cheque.toMap());
+    return docRef.id;
+  }
+
+  /// Update cheque fields (amount, dueDate, status, notes, etc.)
+  Future<void> updateCheque(String chequeId, Map<String, dynamic> data) async {
+    final updateData = Map<String, dynamic>.from(data);
+    updateData['updatedAt'] = FieldValue.serverTimestamp();
+    await _chequesCollection.doc(chequeId).update(updateData);
+  }
+
+  /// Delete a cheque
+  Future<void> deleteCheque(String chequeId) async {
+    await _chequesCollection.doc(chequeId).delete();
+  }
+
+  /// Batch add multiple cheques (useful when generating installments)
+  Future<void> batchCreateCheques(List<ChequeModel> cheques) async {
+    final batch = _firestore.batch();
+    for (final c in cheques) {
+      final docRef = _chequesCollection.doc();
+      batch.set(docRef, c.toMap());
+    }
+    await batch.commit();
+  }
+
+  /// Get all contracts belonging to a specific tenant
+  Future<List<ContractModel>> getContractsByTenant(String tenantUid) async {
+    final snapshot = await _firestore
+        .collection('contracts')
+        .where('tenantUid', isEqualTo: tenantUid)
+        .get();
+    final list = snapshot.docs.map((doc) => ContractModel.fromFirestore(doc)).toList();
+    list.sort((a, b) {
+      if (a.endDate == null) return 1;
+      if (b.endDate == null) return -1;
+      return a.endDate!.compareTo(b.endDate!);
+    });
+    return list;
   }
 }
