@@ -4,6 +4,8 @@ import '../../models/contract_model.dart';
 import '../../services/firestore_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../utils/contact_helper.dart';
+import 'admin_all_cheques_view.dart';
+import 'admin_tenant_details_view.dart';
 
 class AdminContractsView extends StatefulWidget {
   const AdminContractsView({super.key});
@@ -126,6 +128,18 @@ class _AdminContractsViewState extends State<AdminContractsView> {
         elevation: 0,
         backgroundColor: Colors.white,
         foregroundColor: AppColors.textPrimary,
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AdminAllChequesView()),
+              );
+            },
+            icon: const Icon(Icons.payment, size: 18, color: AppColors.primary),
+            label: const Text('جميع الشيكات', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -273,11 +287,31 @@ class _AdminContractsViewState extends State<AdminContractsView> {
         borderRadius: BorderRadius.circular(16),
         side: const BorderSide(color: AppColors.border, width: 1),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () async {
+          if (contract.tenantUid != null && contract.tenantUid!.isNotEmpty) {
+            final tenant = await _firestoreService.getUser(contract.tenantUid!);
+            if (tenant != null && context.mounted) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => AdminTenantDetailsView(tenant: tenant)),
+              );
+              return;
+            }
+          }
+          if (context.mounted) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AdminAllChequesView()),
+            );
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             // Top Row: Code & Badge
             Row(
               children: [
@@ -463,6 +497,36 @@ class _AdminContractsViewState extends State<AdminContractsView> {
                 ),
                 Row(
                   children: [
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        visualDensity: VisualDensity.compact,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: () async {
+                        if (contract.tenantUid != null && contract.tenantUid!.isNotEmpty) {
+                          final tenant = await _firestoreService.getUser(contract.tenantUid!);
+                          if (tenant != null && context.mounted) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => AdminTenantDetailsView(tenant: tenant)),
+                            );
+                            return;
+                          }
+                        }
+                        if (context.mounted) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const AdminAllChequesView()),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.receipt_long, size: 15),
+                      label: const Text('الشيكات', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(width: 4),
                     if (contract.mobileNumber.isNotEmpty) ...[
                       IconButton(
                         icon: const Icon(Icons.phone_outlined, color: AppColors.primary, size: 20),
