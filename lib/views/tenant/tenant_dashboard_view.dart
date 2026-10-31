@@ -1084,6 +1084,21 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
 
                             // 2. Update phone_index mappings first so login works immediately
                             if (authEmail.isNotEmpty) {
+                              final oldDigits = user.phone.replaceAll(RegExp(r'\D'), '');
+                              if (oldDigits.isNotEmpty && oldDigits != sanitized) {
+                                final oldVariants = <String>{oldDigits};
+                                if (oldDigits.startsWith('9715') && oldDigits.length == 12) {
+                                  oldVariants.add('05${oldDigits.substring(4)}');
+                                } else if (oldDigits.startsWith('05') && oldDigits.length == 10) {
+                                  oldVariants.add('971${oldDigits.substring(1)}');
+                                }
+                                for (final ov in oldVariants) {
+                                  if (ov != sanitized && ov != '05${sanitized.substring(4)}') {
+                                    await FirebaseFirestore.instance.collection('phone_index').doc(ov).delete().catchError((_) {});
+                                  }
+                                }
+                              }
+
                               await FirebaseFirestore.instance
                                   .collection('phone_index')
                                   .doc(sanitized)

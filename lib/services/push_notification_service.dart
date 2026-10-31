@@ -89,6 +89,10 @@ class PushNotificationService {
       }
 
       if (token != null) {
+        await FirebaseFirestore.instance.collection('user_tokens').doc(userId).set({
+          'fcmToken': token,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
         await FirebaseFirestore.instance.collection('users').doc(userId).update({
           'fcmToken': token,
           'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
@@ -101,6 +105,10 @@ class PushNotificationService {
       _tokenRefreshSub = _messaging.onTokenRefresh.listen((newToken) async {
         try {
           if (FirebaseAuth.instance.currentUser?.uid != userId) return;
+          await FirebaseFirestore.instance.collection('user_tokens').doc(userId).set({
+            'fcmToken': newToken,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
           await FirebaseFirestore.instance.collection('users').doc(userId).update({
             'fcmToken': newToken,
             'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
@@ -123,6 +131,7 @@ class PushNotificationService {
       _tokenRefreshSub = null;
 
       if (uid != null) {
+        await FirebaseFirestore.instance.collection('user_tokens').doc(uid).delete().catchError((_) {});
         await FirebaseFirestore.instance.collection('users').doc(uid).update({
           'fcmToken': FieldValue.delete(),
           'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),

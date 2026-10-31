@@ -7,38 +7,78 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function userRole() {
+      return firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        ? firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('role', '')
+        : '';
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.get('role', '') == 'admin' ||
+        userRole() == 'admin'
+      );
+    }
+
+    function isTechnician() {
+      return isAuthenticated() && (
+        request.auth.token.get('role', '') == 'technician' ||
+        userRole() == 'technician'
+      );
+    }
+
     function isValidSize() {
-      return request.resource == null || request.resource.size < 25 * 1024 * 1024;
+      return request.resource != null && request.resource.size < 25 * 1024 * 1024;
     }
 
-    // 1. العقود (contracts)
+    function isAllowedFile() {
+      return request.resource.contentType == null
+          || request.resource.contentType.matches('image/.*')
+          || request.resource.contentType == 'application/pdf'
+          || request.resource.contentType == 'application/msword'
+          || request.resource.contentType == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          || request.resource.contentType == 'application/octet-stream';
+    }
+
+    // 1. العقود (contracts) - يقرؤها صاحب العقد أو الأدمن، ويرفعها/يحذفها الأدمن فقط
     match /contracts/{userId}/{fileName} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && isValidSize();
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow create, update: if isAdmin() && isValidSize() && isAllowedFile();
+      allow delete: if isAdmin();
     }
 
-    // 2. مستندات المستأجر الإضافية (documents)
+    // 2. مستندات المستأجر الإضافية (documents) - خاصة بصاحب الحساب والأدمن فقط
     match /documents/{userId}/{fileName} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && isValidSize();
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow create, update: if isAuthenticated()
+                            && (request.auth.uid == userId || isAdmin())
+                            && isValidSize()
+                            && isAllowedFile();
+      allow delete: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
     }
 
-    // 3. صور طلبات الصيانة (tasks)
+    // 3. صور طلبات الصيانة (tasks) - يرفعها صاحب الطلب أو الأدمن فقط
     match /tasks/{userId}/{fileName} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && isValidSize();
+      allow create, update: if isAuthenticated()
+                            && (request.auth.uid == userId || isAdmin())
+                            && isValidSize()
+                            && isAllowedFile();
+      allow delete: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
     }
 
-    // 4. صور إثبات إنجاز الصيانة (completions)
+    // 4. صور إثبات إنجاز الصيانة (completions) - يرفعها الفني أو الأدمن فقط
     match /completions/{taskId}/{fileName} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && isValidSize();
+      allow create, update: if (isTechnician() || isAdmin()) && isValidSize() && isAllowedFile();
+      allow delete: if isAdmin();
     }
 
-    // 5. مرفقات وصور المحادثات (chats)
+    // 5. مرفقات وصور المحادثات (chats) - يمنع حذفها أو استبدالها لغير الأدمن
     match /chats/{chatId}/{fileName} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && isValidSize();
+      allow create: if isAuthenticated() && isValidSize() && isAllowedFile();
+      allow update, delete: if isAdmin();
     }
 
     match /{allPaths=**} {

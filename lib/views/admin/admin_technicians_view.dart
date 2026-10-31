@@ -140,6 +140,7 @@ class _AdminTechniciansViewState extends State<AdminTechniciansView> {
 
                             if (technician.email != null && technician.email!.trim().isNotEmpty) {
                               final normalizedEmail = technician.email!.trim().toLowerCase();
+                              final oldCleaned = technician.phone.replaceAll(RegExp(r'[\s\-()]'), '');
                               final cleaned = newPhone.replaceAll(RegExp(r'[\s\-()]'), '');
                               final variants = <String>{cleaned};
                               if (cleaned.startsWith('05') && cleaned.length == 10) {
@@ -151,6 +152,24 @@ class _AdminTechniciansViewState extends State<AdminTechniciansView> {
                               } else if (cleaned.startsWith('+9715') && cleaned.length == 13) {
                                 variants.add('0${cleaned.substring(4)}');
                                 variants.add(cleaned.substring(1));
+                              }
+                              if (oldCleaned.isNotEmpty && oldCleaned != cleaned) {
+                                final oldVariants = <String>{oldCleaned};
+                                if (oldCleaned.startsWith('05') && oldCleaned.length == 10) {
+                                  oldVariants.add('971${oldCleaned.substring(1)}');
+                                  oldVariants.add('+971${oldCleaned.substring(1)}');
+                                } else if (oldCleaned.startsWith('9715') && oldCleaned.length == 12) {
+                                  oldVariants.add('0${oldCleaned.substring(3)}');
+                                  oldVariants.add('+$oldCleaned');
+                                } else if (oldCleaned.startsWith('+9715') && oldCleaned.length == 13) {
+                                  oldVariants.add('0${oldCleaned.substring(4)}');
+                                  oldVariants.add(oldCleaned.substring(1));
+                                }
+                                for (final ov in oldVariants) {
+                                  if (ov.isNotEmpty && !variants.contains(ov)) {
+                                    await FirebaseFirestore.instance.collection('phone_index').doc(ov).delete().catchError((_) {});
+                                  }
+                                }
                               }
                               for (final v in variants) {
                                 if (v.isNotEmpty) {

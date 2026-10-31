@@ -2,6 +2,7 @@ const sql = require('mssql/msnodesqlv8');
 const admin = require('firebase-admin');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 // 1. Initialize Firebase Admin SDK
 let serviceAccountPath = path.resolve(__dirname, 'serviceAccountKey.json');
@@ -332,7 +333,7 @@ async function runSync() {
         if (primaryMobile) {
           email = `${primaryMobile}@elitelivingre.ae`;
         } else {
-          const nameHash = Buffer.from(group.name).toString('hex').substring(0, 12);
+          const nameHash = crypto.createHash('sha256').update(group.key).digest('hex').substring(0, 16);
           email = `tenant_${nameHash}@elitelivingre.ae`;
         }
       }
@@ -424,18 +425,28 @@ async function runSync() {
           } catch (createErr) {
             if (createErr.code === 'auth/email-already-exists') {
               const u = await auth.getUserByEmail(email);
-              uid = u.uid;
-              userByEmail.set(emailKey, u);
-              userByName.set(nameKey, u);
-              authExistingCount++;
+              if (!nonTenantUids.has(u.uid)) {
+                uid = u.uid;
+                userByEmail.set(emailKey, u);
+                userByName.set(nameKey, u);
+                authExistingCount++;
+              } else {
+                const nameHash = crypto.createHash('sha256').update(group.key).digest('hex').substring(0, 16);
+                uid = `tenant_${nameHash}`;
+              }
             } else if (phoneKey && createErr.code === 'auth/phone-number-already-exists') {
               const u = await auth.getUserByPhoneNumber(phoneKey);
-              uid = u.uid;
-              userByPhone.set(phoneKey, u);
-              userByName.set(nameKey, u);
-              authExistingCount++;
+              if (!nonTenantUids.has(u.uid)) {
+                uid = u.uid;
+                userByPhone.set(phoneKey, u);
+                userByName.set(nameKey, u);
+                authExistingCount++;
+              } else {
+                const nameHash = crypto.createHash('sha256').update(group.key).digest('hex').substring(0, 16);
+                uid = `tenant_${nameHash}`;
+              }
             } else {
-              const nameHash = Buffer.from(group.name).toString('hex').substring(0, 16);
+              const nameHash = crypto.createHash('sha256').update(group.key).digest('hex').substring(0, 16);
               uid = `tenant_${nameHash}`;
               console.warn(`⚠️ تعذر إنشاء حساب Auth لـ (${group.name}):`, createErr.message);
             }
@@ -443,7 +454,7 @@ async function runSync() {
         }
       } catch (err) {
         console.warn(`⚠️ خطأ في معالجة Auth لـ (${group.name}):`, err.message);
-        const nameHash = Buffer.from(group.name).toString('hex').substring(0, 16);
+        const nameHash = crypto.createHash('sha256').update(group.key).digest('hex').substring(0, 16);
         uid = uid || `tenant_${nameHash}`;
       }
 

@@ -39,16 +39,17 @@ exports.deleteAuthUser = functions.firestore
       }
     }
 
-    // Clean up phone_index entries belonging to this user
+    // Clean up user_tokens and phone_index entries belonging to this user
     try {
       const db = admin.firestore();
       const batch = db.batch();
-      let hasDeletes = false;
+      let hasDeletes = true;
+
+      batch.delete(db.collection("user_tokens").doc(userId));
 
       const byUidSnap = await db.collection("phone_index").where("uid", "==", userId).get();
       byUidSnap.forEach((doc) => {
         batch.delete(doc.ref);
-        hasDeletes = true;
       });
 
       const phoneVariants = getPhoneVariants(deletedData.phone);
@@ -61,7 +62,6 @@ exports.deleteAuthUser = functions.firestore
             (deletedData.email && snapDoc.data().email === String(deletedData.email).trim().toLowerCase()))
         ) {
           batch.delete(ref);
-          hasDeletes = true;
         }
       }
 
@@ -69,7 +69,7 @@ exports.deleteAuthUser = functions.firestore
         await batch.commit();
       }
     } catch (cleanupErr) {
-      console.error(`Error cleaning up phone_index for ${userId}:`, cleanupErr);
+      console.error(`Error cleaning up phone_index / user_tokens for ${userId}:`, cleanupErr);
     }
   });
 
@@ -83,7 +83,8 @@ exports.createTechnician = functions.https.onCall(async (data, context) => {
   }
 
   // 🛡️ Security Check: Ensure caller is an admin
-  const callerDoc = await admin.firestore().collection('users').doc(context.auth.uid).get();
+  const db = admin.firestore();
+  const callerDoc = await db.collection('users').doc(context.auth.uid).get();
   if (!callerDoc.exists || callerDoc.data()?.role !== 'admin') {
     throw new functions.https.HttpsError(
       'permission-denied',
@@ -91,7 +92,7 @@ exports.createTechnician = functions.https.onCall(async (data, context) => {
     );
   }
 
-  const { name, email, password, phone, profession } = data;
+  const { name, email, password, phone, profession } = data || {};
 
   if (!email || !password || !name) {
     throw new functions.https.HttpsError(
@@ -100,32 +101,54 @@ exports.createTechnician = functions.https.onCall(async (data, context) => {
     );
   }
 
+  if (String(password).length < 6) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Password must be at least 6 characters long.'
+    );
+  }
+
   const normalizedEmail = String(email).trim().toLowerCase();
   const trimmedName = String(name).trim();
   const trimmedPhone = phone ? String(phone).trim() : '';
+  const phoneVariants = getPhoneVariants(trimmedPhone);
+
+  // Verify phone number is not already claimed by another user
+  for (const variant of phoneVariants) {
+    const existingPhoneDoc = await db.collection('phone_index').doc(variant).get();
+    if (existingPhoneDoc.exists) {
+      const existingData = existingPhoneDoc.data() || {};
+      if (existingData.email && existingData.email !== normalizedEmail) {
+        throw new functions.https.HttpsError(
+          'already-exists',
+          'This phone number is already linked to another account.'
+        );
+      }
+    }
+  }
 
   try {
     // Create the user in Firebase Auth
     const userRecord = await admin.auth().createUser({
       email: normalizedEmail,
-      password: password,
+      password: String(password),
       displayName: trimmedName,
     });
 
-    const db = admin.firestore();
+    // Set role custom claim for fast Storage & Firestore rule checks
+    await admin.auth().setCustomUserClaims(userRecord.uid, { role: 'technician' });
 
     // Save the user data in Firestore
     await db.collection('users').doc(userRecord.uid).set({
       name: trimmedName,
       email: normalizedEmail,
       phone: trimmedPhone,
-      profession: profession || '',
+      profession: profession ? String(profession).trim() : '',
       role: 'technician',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
     // Index technician phone variants in phone_index for phone-based login
-    const phoneVariants = getPhoneVariants(trimmedPhone);
     if (phoneVariants.length > 0) {
       const batch = db.batch();
       for (const variant of phoneVariants) {
@@ -140,7 +163,10 @@ exports.createTechnician = functions.https.onCall(async (data, context) => {
     return { success: true, uid: userRecord.uid };
   } catch (error) {
     console.error('Error creating technician:', error);
-    throw new functions.https.HttpsError('internal', error.message);
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+    throw new functions.https.HttpsError('internal', error.message || 'Failed to create technician.');
   }
 });
 
@@ -166,16 +192,22 @@ exports.sendPushNotification = functions.firestore
       return null;
     }
 
-    try {
-      // Get user document to retrieve fcmToken
-      const userDoc = await admin.firestore().collection('users').doc(userId).get();
-      if (!userDoc.exists) {
-        console.log(`User ${userId} not found.`);
-        return null;
-      }
+    const db = admin.firestore();
 
-      const userData = userDoc.data();
-      const fcmToken = userData.fcmToken;
+    try {
+      // Retrieve fcmToken from isolated user_tokens collection first, fallback to users/{userId}
+      let fcmToken = null;
+      const tokenDoc = await db.collection('user_tokens').doc(userId).get();
+      if (tokenDoc.exists && tokenDoc.data()?.fcmToken) {
+        fcmToken = tokenDoc.data().fcmToken;
+      } else {
+        const userDoc = await db.collection('users').doc(userId).get();
+        if (!userDoc.exists) {
+          console.log(`User ${userId} not found.`);
+          return null;
+        }
+        fcmToken = userDoc.data()?.fcmToken || null;
+      }
 
       if (!fcmToken) {
         console.log(`User ${userId} does not have an FCM token.`);
@@ -231,9 +263,10 @@ exports.sendPushNotification = functions.firestore
     } catch (error) {
       if (error.code === 'messaging/registration-token-not-registered') {
         console.log(`Token for user ${userId} expired. Cleaning up.`);
-        await admin.firestore().collection('users').doc(userId).update({
+        await db.collection('user_tokens').doc(userId).delete().catch(() => {});
+        await db.collection('users').doc(userId).update({
           fcmToken: admin.firestore.FieldValue.delete()
-        });
+        }).catch(() => {});
       } else {
         console.error('Error sending push notification:', error);
       }
@@ -241,44 +274,71 @@ exports.sendPushNotification = functions.firestore
     return null;
   });
 
-// Automatically clean up duplicate FCM tokens so no two users share the same device token
+// Isolate FCM tokens into user_tokens/{userId} (unreadable by clients) and unlink shared device tokens
 exports.onUserTokenUpdated = functions.firestore
   .document("users/{userId}")
   .onWrite(async (change, context) => {
     const userId = context.params.userId;
-    if (!change.after.exists) return null;
-
-    const afterData = change.after.data();
-    const beforeData = change.before.exists ? change.before.data() : null;
-
-    const newToken = afterData ? afterData.fcmToken : null;
-    if (!newToken) return null;
-
-    if (beforeData && beforeData.fcmToken === newToken) return null;
-
     const db = admin.firestore();
+
+    if (!change.after.exists) {
+      await db.collection("user_tokens").doc(userId).delete().catch(() => {});
+      return null;
+    }
+
+    const afterData = change.after.data() || {};
+    const beforeData = change.before.exists ? (change.before.data() || {}) : {};
+
+    const newToken = afterData.fcmToken || null;
+
+    // If token was explicitly cleared on logout (fcmToken is null AND fcmTokenUpdatedAt changed)
+    if (!newToken) {
+      const beforeTs = beforeData.fcmTokenUpdatedAt ? beforeData.fcmTokenUpdatedAt.toMillis?.() : null;
+      const afterTs = afterData.fcmTokenUpdatedAt ? afterData.fcmTokenUpdatedAt.toMillis?.() : null;
+      if (beforeTs !== afterTs && afterTs !== null) {
+        await db.collection("user_tokens").doc(userId).delete().catch(() => {});
+      }
+      return null;
+    }
+
+    const batch = db.batch();
+
+    // 1. Save token to private user_tokens/{userId} collection
+    batch.set(db.collection("user_tokens").doc(userId), {
+      fcmToken: newToken,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // 2. Remove fcmToken from the readable users/{userId} document so no other user can read/steal it
+    batch.update(change.after.ref, {
+      fcmToken: admin.firestore.FieldValue.delete(),
+    });
+
+    // 3. Unlink this device token from any previous user on the same device
+    const duplicateTokensSnap = await db
+      .collection("user_tokens")
+      .where("fcmToken", "==", newToken)
+      .get();
+
+    duplicateTokensSnap.forEach((doc) => {
+      if (doc.id !== userId) {
+        batch.delete(doc.ref);
+      }
+    });
+
     const duplicateUsersSnap = await db
       .collection("users")
       .where("fcmToken", "==", newToken)
       .get();
 
-    const batch = db.batch();
-    let count = 0;
-
     duplicateUsersSnap.forEach((doc) => {
       if (doc.id !== userId) {
         batch.update(doc.ref, {
           fcmToken: admin.firestore.FieldValue.delete(),
-          fcmTokenUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
-        count++;
       }
     });
 
-    if (count > 0) {
-      await batch.commit();
-      console.log(`Unlinked duplicate token from ${count} previous user(s) when claimed by ${userId}`);
-    }
-
+    await batch.commit();
     return null;
   });
