@@ -546,6 +546,7 @@ class _AdminContractsViewState extends State<AdminContractsView> {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 }
