@@ -135,7 +135,8 @@ async function runSync() {
           v.Rent                                AS rentAmount,
           v.YearValue                           AS yearValue,
           LTRIM(RTRIM(v.ContractState))         AS contractState,
-          v.CustomerGuid                        AS customerGuid
+          v.CustomerGuid                        AS customerGuid,
+          v.Guid                                AS contractGuid
       FROM vwLeaseApartment v
       LEFT JOIN Customer c ON v.CustomerGuid = c.Guid
       WHERE LTRIM(RTRIM(v.ContractState)) = 'valid'
@@ -147,6 +148,35 @@ async function runSync() {
     const result = await pool.request().query(query);
     const rows = result.recordset;
     console.log(`📋 تم استرجاع ${rows.length} عقداً من قاعدة البيانات.`);
+
+    console.log('⏳ جاري استرجاع جميع الشيكات المرتبطة بالعقود (جدول Checks)...');
+    const chequesQuery = `
+      SELECT 
+          LTRIM(RTRIM(c.NO))             AS chequeNumber,
+          c.Value                        AS amount,
+          c.DueDate                      AS dueDate,
+          c.Date                         AS date,
+          LTRIM(RTRIM(c.BankName))       AS bankName,
+          LTRIM(RTRIM(c.Note))           AS notes,
+          c.ContractGuid                 AS contractGuid,
+          c.Deposition                   AS isDeposited
+      FROM Checks c
+      WHERE c.ContractGuid IS NOT NULL;
+    `;
+    const chequesResult = await pool.request().query(chequesQuery);
+    const chequesRows = chequesResult.recordset;
+    console.log(`💳 تم استرجاع ${chequesRows.length} شيكاً من قاعدة البيانات.`);
+
+    // Group cheques by contractGuid
+    const chequesByContractGuid = new Map();
+    for (const ch of chequesRows) {
+      if (!ch.contractGuid) continue;
+      const key = String(ch.contractGuid).toLowerCase();
+      if (!chequesByContractGuid.has(key)) {
+        chequesByContractGuid.set(key, []);
+      }
+      chequesByContractGuid.get(key).push(ch);
+    }
 
     if (rows.length === 0) {
       console.log('ℹ️ لا توجد عقود تطابق الشروط حالياً.');
@@ -229,6 +259,7 @@ async function runSync() {
     console.log(`👤 تم العثور على ${allUsersResult.users.length} حساب Auth و ${firestoreUsersSnap.size} مستخدم في Firestore.`);
 
     let processedCount = 0;
+    let chequesSyncedCount = 0;
     let authCreatedCount = 0;
     let authExistingCount = 0;
 
@@ -489,6 +520,37 @@ async function runSync() {
         currentBatchOps++;
         processedCount++;
         await commitBatchIfNeeded(false);
+
+        // 5.5. Save cheques belonging to this contract
+        const contractCheques = chequesByContractGuid.get(String(c.contractGuid || '').toLowerCase()) || [];
+        for (const ch of contractCheques) {
+          const safeChqNo = (ch.chequeNumber || 'nochq').toString().replace(/[\/\\#\s]/g, '_');
+          const chequeDocId = `chq_${safeCode}_${safeChqNo}`;
+          const chequeRef = db.collection('cheques').doc(chequeDocId);
+
+          const isPaid = ch.isDeposited === true || ch.isDeposited === 1;
+
+          const chequeData = {
+            tenantUid: uid,
+            tenantName: group.name,
+            chequeNumber: ch.chequeNumber || '',
+            bankName: ch.bankName || 'Bank',
+            amount: ch.amount || 0,
+            dueDate: toMiddayTimestamp(ch.dueDate),
+            date: toMiddayTimestamp(ch.date),
+            status: isPaid ? 'paid' : 'pending',
+            contractCode: c.contractCode || '',
+            contractNumber: c.contractNumber || null,
+            buildingName: (c.buildingName || '').trim(),
+            unitNumber: (c.unitNumber || '').trim(),
+            notes: ch.notes || null,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          };
+          currentBatch.set(chequeRef, chequeData, { merge: true });
+          currentBatchOps++;
+          chequesSyncedCount++;
+          await commitBatchIfNeeded(false);
+        }
       }
 
       // 6. Save unified tenant User document in `users/{uid}`
@@ -556,6 +618,7 @@ async function runSync() {
     console.log('========================================================');
     console.log('🎉 تمت المزامنة بنجاح تام!');
     console.log(`✔️ إجمالي العقود المعالجة والمرفوعة: ${processedCount}`);
+    console.log(`💳 إجمالي الشيكات المعالجة والمرفوعة: ${chequesSyncedCount}`);
     console.log(`👤 حسابات مستأجرين جديدة تم إنشاؤها: ${authCreatedCount}`);
     console.log(`🔄 حسابات مستأجرين تم تحديثها: ${authExistingCount}`);
     console.log('========================================================');
