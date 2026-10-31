@@ -9,7 +9,7 @@ enum UserRole {
   static UserRole fromString(String value) {
     return UserRole.values.firstWhere(
       (e) => e.value == value,
-      orElse: () => throw ArgumentError('Invalid UserRole: $value'),
+      orElse: () => UserRole.tenant,
     );
   }
 }

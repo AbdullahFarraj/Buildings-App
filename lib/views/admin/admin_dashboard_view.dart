@@ -36,7 +36,14 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
   
   int _selectedIndex = 0;
   String _selectedFilter = 'All';
-  final List<String> _filters = ['All', 'Pending', 'Assigned', 'In Progress', 'Completed'];
+  final List<String> _filters = [
+    'All',
+    'Pending',
+    'Assigned',
+    'In Progress',
+    'Waiting Confirmation',
+    'Completed',
+  ];
   
   UserModel? _adminUser;
   bool _isLoadingUser = true;
@@ -245,6 +252,7 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
             'Pending': TaskStatus.pending,
             'Assigned': TaskStatus.assigned,
             'In Progress': TaskStatus.inProgress,
+            'Waiting Confirmation': TaskStatus.waitingConfirmation,
             'Completed': TaskStatus.completed,
           };
           final targetStatus = statusMap[_selectedFilter];

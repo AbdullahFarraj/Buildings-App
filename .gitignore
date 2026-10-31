@@ -58,3 +58,5 @@ serviceAccountKey.json
 # Node / Sync Service
 **/node_modules/
 npm-debug.log*
+
+/android/build_error.txt

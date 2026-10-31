@@ -371,9 +371,19 @@ class _ChatSheetState extends State<ChatSheet> {
                               const SizedBox(height: 8),
                               GestureDetector(
                                 onTap: () async {
-                                  final url = Uri.parse(message.fileUrl!);
-                                  if (await canLaunchUrl(url)) {
-                                    await launchUrl(url);
+                                  final url = Uri.tryParse(message.fileUrl!);
+                                  if (url == null) return;
+                                  try {
+                                    await launchUrl(
+                                      url,
+                                      mode: LaunchMode.externalApplication,
+                                    );
+                                  } catch (_) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Could not open attachment.')),
+                                      );
+                                    }
                                   }
                                 },
                                 child: Container(

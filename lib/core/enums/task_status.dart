@@ -12,7 +12,7 @@ enum TaskStatus {
   static TaskStatus fromString(String value) {
     return TaskStatus.values.firstWhere(
       (e) => e.value == value,
-      orElse: () => throw ArgumentError('Invalid TaskStatus: $value'),
+      orElse: () => TaskStatus.pending,
     );
   }
 }

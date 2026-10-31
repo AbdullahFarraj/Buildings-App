@@ -452,6 +452,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
       case TaskStatus.pending: color = Colors.orange; break;
       case TaskStatus.assigned: color = Colors.blue; break;
       case TaskStatus.inProgress: color = Colors.purple; break;
+      case TaskStatus.waitingConfirmation: color = Colors.teal; break;
       case TaskStatus.completed: color = Colors.green; break;
       default: color = Colors.grey;
     }

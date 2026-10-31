@@ -308,18 +308,45 @@ class FirestoreService {
 
     await _tasksCollection.doc(taskId).collection('messages').add(message.toMap());
 
-    // Send notifications to receivers (Admin, Tech, or Tenant)
-    for (String receiverId in receiverIds) {
-      if (receiverId.isNotEmpty && receiverId != senderId) {
-        await NotificationService().sendNotification(
-          userId: receiverId,
-          senderId: senderId,
-          title: 'New Message from $senderName 💬',
-          message: text.isNotEmpty ? text : 'Sent an attachment',
-          relatedTaskId: taskId,
-        );
+    final String msgPreview = text.isNotEmpty
+        ? text
+        : (fileName != null ? 'Sent an attachment: $fileName' : 'Sent an attachment');
+
+    // Collect all task participants (Tenant + assigned Technician + explicit receivers)
+    final Set<String> targetUserIds = {
+      ...receiverIds.where((id) => id.isNotEmpty && id != senderId),
+    };
+
+    final task = await getTask(taskId);
+    if (task != null) {
+      if (task.tenantId.isNotEmpty && task.tenantId != senderId) {
+        targetUserIds.add(task.tenantId);
+      }
+      if (task.technicianId != null &&
+          task.technicianId!.isNotEmpty &&
+          task.technicianId != senderId) {
+        targetUserIds.add(task.technicianId!);
       }
     }
+
+    // Send notifications to Tenant / Technician participants
+    for (final String receiverId in targetUserIds) {
+      await NotificationService().sendNotification(
+        userId: receiverId,
+        senderId: senderId,
+        title: 'New Message from $senderName 💬',
+        message: msgPreview,
+        relatedTaskId: taskId,
+      );
+    }
+
+    // Also notify Admins (notifyAdmins automatically skips senderId if an Admin sent the message)
+    await NotificationService().notifyAdmins(
+      senderId: senderId,
+      title: 'Task Chat - $senderName 💬',
+      message: msgPreview,
+      relatedTaskId: taskId,
+    );
   }
 
   // --- Direct Chat ---

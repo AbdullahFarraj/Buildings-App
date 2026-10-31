@@ -182,6 +182,9 @@ class NotificationsBell extends StatelessWidget {
               if (task != null) {
                 isDirect = false;
                 chatTitle = 'Task: ${task.title}';
+                if (task.tenantId.isNotEmpty && task.tenantId != user.uid) {
+                  receivers.add(task.tenantId);
+                }
                 if (task.technicianId != null && task.technicianId != user.uid) {
                   receivers.add(task.technicianId!);
                 }
