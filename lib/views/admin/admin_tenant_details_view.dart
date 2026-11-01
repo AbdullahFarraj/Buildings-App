@@ -43,6 +43,9 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
     super.initState();
     _tenant = widget.tenant;
     _tabController = TabController(length: 3, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshTenant();
+    });
   }
 
   @override
@@ -109,7 +112,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                 children: const [
                   Icon(Icons.payment, color: AppColors.primary),
                   SizedBox(width: 8),
-                  Text('إضافة شيك جديد / Add Cheque', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text('Add New Cheque', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ],
               ),
               content: SingleChildScrollView(
@@ -120,7 +123,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                     TextField(
                       controller: chequeNumCtrl,
                       decoration: const InputDecoration(
-                        labelText: 'رقم الشيك * (Cheque Number)',
+                        labelText: 'Cheque Number *',
                         hintText: 'e.g. 000142',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.tag),
@@ -131,7 +134,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                     TextField(
                       controller: amountCtrl,
                       decoration: const InputDecoration(
-                        labelText: 'المبلغ بالدرهم * (Amount AED)',
+                        labelText: 'Amount (AED) *',
                         hintText: 'e.g. 15000',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.attach_money),
@@ -142,7 +145,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                     DropdownButtonFormField<String>(
                       value: popularBanks.contains(bankCtrl.text) ? bankCtrl.text : 'Other',
                       decoration: const InputDecoration(
-                        labelText: 'اسم البنك (Bank Name)',
+                        labelText: 'Bank Name',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.account_balance),
                       ),
@@ -160,13 +163,13 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                       TextField(
                         controller: bankCtrl,
                         decoration: const InputDecoration(
-                          labelText: 'اكتب اسم البنك (Enter Bank)',
+                          labelText: 'Enter Bank Name',
                           border: OutlineInputBorder(),
                         ),
                       ),
                     ],
                     const SizedBox(height: 12),
-                    // Due Date Picker (وقت الدفع)
+                    // Due Date Picker
                     InkWell(
                       onTap: () async {
                         final picked = await showDatePicker(
@@ -195,7 +198,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('تاريخ ووقت الاستحقاق للدفع * (Due Date)', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                const Text('Payment Due Date *', style: TextStyle(fontSize: 11, color: Colors.grey)),
                                 Text(_dateFormat.format(selectedDate), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                               ],
                             ),
@@ -209,15 +212,15 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                     DropdownButtonFormField<String>(
                       value: selectedStatus,
                       decoration: const InputDecoration(
-                        labelText: 'حالة الشيك (Status)',
+                        labelText: 'Cheque Status',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.check_circle_outline),
                       ),
                       items: const [
-                        DropdownMenuItem(value: 'pending', child: Text('قيد الانتظار (Pending)')),
-                        DropdownMenuItem(value: 'paid', child: Text('مدفوع / تم الصرف (Paid)')),
-                        DropdownMenuItem(value: 'bounced', child: Text('مرتجع (Bounced)')),
-                        DropdownMenuItem(value: 'cancelled', child: Text('ملغي (Cancelled)')),
+                        DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                        DropdownMenuItem(value: 'paid', child: Text('Paid / Cleared')),
+                        DropdownMenuItem(value: 'bounced', child: Text('Bounced')),
+                        DropdownMenuItem(value: 'cancelled', child: Text('Cancelled')),
                       ],
                       onChanged: (val) {
                         if (val != null) setDialogState(() => selectedStatus = val);
@@ -228,14 +231,14 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                       DropdownButtonFormField<String>(
                         value: selectedUnit,
                         decoration: const InputDecoration(
-                          labelText: 'العقار المرتبط (Property / Unit)',
+                          labelText: 'Associated Property / Unit',
                           border: OutlineInputBorder(),
                           prefixIcon: Icon(Icons.apartment),
                         ),
                         items: _tenant.allProperties.map((p) {
                           return DropdownMenuItem(
                             value: p.unitNumber,
-                            child: Text('${p.buildingName} - شقة ${p.unitNumber}'),
+                            child: Text('${p.buildingName} - Apt ${p.unitNumber}'),
                           );
                         }).toList(),
                         onChanged: (val) {
@@ -254,7 +257,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                     TextField(
                       controller: notesCtrl,
                       decoration: const InputDecoration(
-                        labelText: 'ملاحظات إضافية (Notes)',
+                        labelText: 'Notes (Optional)',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.note),
                       ),
@@ -266,7 +269,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('إلغاء / Cancel'),
+                  child: const Text('Cancel'),
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
@@ -278,7 +281,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                     final amt = double.tryParse(amountCtrl.text.trim());
                     if (numStr.isEmpty || amt == null || amt <= 0) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('الرجاء إدخال رقم الشيك ومبلغ صحيح')),
+                        const SnackBar(content: Text('Please enter a valid cheque number and positive amount')),
                       );
                       return;
                     }
@@ -304,20 +307,20 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                       await _firestoreService.addCheque(newCheque);
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('تمت إضافة الشيك بنجاح ✅')),
+                          const SnackBar(content: Text('Cheque added successfully ✅')),
                         );
                       }
                     } catch (e) {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('خطأ أثناء إضافة الشيك: $e')),
+                          SnackBar(content: Text('Error adding cheque: $e')),
                         );
                       }
                     } finally {
                       if (mounted) setState(() => _isLoading = false);
                     }
                   },
-                  child: const Text('حفظ الشيك / Save'),
+                  child: const Text('Save Cheque'),
                 ),
               ],
             );
@@ -347,7 +350,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                 children: const [
                   Icon(Icons.edit, color: AppColors.primary),
                   SizedBox(width: 8),
-                  Text('تعديل بيانات الشيك / Edit Cheque', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text('Edit Cheque', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ],
               ),
               content: SingleChildScrollView(
@@ -357,18 +360,18 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                   children: [
                     TextField(
                       controller: chequeNumCtrl,
-                      decoration: const InputDecoration(labelText: 'رقم الشيك (Cheque Number)', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(labelText: 'Cheque Number', border: OutlineInputBorder()),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: amountCtrl,
-                      decoration: const InputDecoration(labelText: 'المبلغ بالدرهم (Amount AED)', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(labelText: 'Amount (AED)', border: OutlineInputBorder()),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: bankCtrl,
-                      decoration: const InputDecoration(labelText: 'اسم البنك (Bank Name)', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(labelText: 'Bank Name', border: OutlineInputBorder()),
                     ),
                     const SizedBox(height: 12),
                     InkWell(
@@ -399,7 +402,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('تاريخ ووقت الاستحقاق (Due Date)', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                const Text('Payment Due Date', style: TextStyle(fontSize: 11, color: Colors.grey)),
                                 Text(_dateFormat.format(selectedDate), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                               ],
                             ),
@@ -412,12 +415,12 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       value: selectedStatus,
-                      decoration: const InputDecoration(labelText: 'حالة الشيك (Status)', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(labelText: 'Cheque Status', border: OutlineInputBorder()),
                       items: const [
-                        DropdownMenuItem(value: 'pending', child: Text('قيد الانتظار (Pending)')),
-                        DropdownMenuItem(value: 'paid', child: Text('مدفوع / تم الصرف (Paid)')),
-                        DropdownMenuItem(value: 'bounced', child: Text('مرتجع (Bounced)')),
-                        DropdownMenuItem(value: 'cancelled', child: Text('ملغي (Cancelled)')),
+                        DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                        DropdownMenuItem(value: 'paid', child: Text('Paid / Cleared')),
+                        DropdownMenuItem(value: 'bounced', child: Text('Bounced')),
+                        DropdownMenuItem(value: 'cancelled', child: Text('Cancelled')),
                       ],
                       onChanged: (val) {
                         if (val != null) setDialogState(() => selectedStatus = val);
@@ -426,7 +429,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                     const SizedBox(height: 12),
                     TextField(
                       controller: notesCtrl,
-                      decoration: const InputDecoration(labelText: 'ملاحظات (Notes)', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(labelText: 'Notes', border: OutlineInputBorder()),
                       maxLines: 2,
                     ),
                   ],
@@ -435,7 +438,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('إلغاء'),
+                  child: const Text('Cancel'),
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
@@ -457,20 +460,20 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                       });
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('تم تحديث الشيك بنجاح ✅')),
+                          const SnackBar(content: Text('Cheque updated successfully ✅')),
                         );
                       }
                     } catch (e) {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('خطأ أثناء تحديث الشيك: $e')),
+                          SnackBar(content: Text('Error updating cheque: $e')),
                         );
                       }
                     } finally {
                       if (mounted) setState(() => _isLoading = false);
                     }
                   },
-                  child: const Text('تحديث / Update'),
+                  child: const Text('Update Cheque'),
                 ),
               ],
             );
@@ -484,18 +487,21 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
     final newStatus = cheque.isPaid ? 'pending' : 'paid';
     setState(() => _isLoading = true);
     try {
-      await _firestoreService.updateCheque(cheque.id, {'status': newStatus});
+      await _firestoreService.updateCheque(cheque.id, {
+        'status': newStatus,
+        if (newStatus == 'paid') 'depositDate': FieldValue.serverTimestamp(),
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(newStatus == 'paid' ? 'تم تسجيل الشيك كـ (مدفوع / تم الصرف) ✅' : 'تمت إعادة الشيك لـ (قيد الانتظار) ⏳'),
+            content: Text(newStatus == 'paid' ? 'Cheque marked as Paid / Cleared ✅' : 'Cheque returned to Pending ⏳'),
             backgroundColor: newStatus == 'paid' ? Colors.green.shade800 : Colors.blueGrey,
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -506,13 +512,13 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('حذف الشيك'),
-        content: Text('هل أنت متأكد من حذف الشيك رقم ${cheque.chequeNumber} بمبلغ ${_currencyFormat.format(cheque.amount)} درهم؟'),
+        title: const Text('Delete Cheque'),
+        content: Text('Are you sure you want to delete cheque #${cheque.chequeNumber} for ${_currencyFormat.format(cheque.amount)} AED?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('حذف', style: TextStyle(color: Colors.red)),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -523,11 +529,11 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
       try {
         await _firestoreService.deleteCheque(cheque.id);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الشيك بنجاح')));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cheque deleted successfully')));
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
         }
       } finally {
         if (mounted) setState(() => _isLoading = false);
@@ -539,7 +545,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
   void _showGenerateInstallmentsDialog() {
     if (_tenant.allProperties.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('لا توجد عقارات أو عقود مسجلة لهذا المستأجر لتوليد الشيكات')),
+        const SnackBar(content: Text('No registered properties or contracts for this tenant to generate cheques')),
       );
       return;
     }
@@ -564,7 +570,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                 children: const [
                   Icon(Icons.auto_awesome, color: AppColors.accent),
                   SizedBox(width: 8),
-                  Text('توليد دفعات الشيكات تلقائياً', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                  Text('Auto-Generate Cheque Installments', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
                 ],
               ),
               content: SingleChildScrollView(
@@ -581,11 +587,11 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('🏢 ${property.buildingName} - شقة ${property.unitNumber}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          Text('🏢 ${property.buildingName} - Apt ${property.unitNumber}', style: const TextStyle(fontWeight: FontWeight.bold)),
                           const SizedBox(height: 4),
-                          Text('إجمالي القيمة الإيجارية: ${_currencyFormat.format(totalRent)} د.إ', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                          Text('Total Rent Value: ${_currencyFormat.format(totalRent)} AED', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
                           if (property.startDate != null)
-                            Text('تاريخ البداية: ${_dateFormat.format(property.startDate!)}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                            Text('Start Date: ${_dateFormat.format(property.startDate!)}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
                         ],
                       ),
                     ),
@@ -593,17 +599,17 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                     DropdownButtonFormField<int>(
                       value: installmentsCount,
                       decoration: const InputDecoration(
-                        labelText: 'عدد الدفعات / الشيكات (Installments)',
+                        labelText: 'Installments Count (Cheques)',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.pie_chart),
                       ),
                       items: const [
-                        DropdownMenuItem(value: 1, child: Text('دفعة واحدة (1 Cheque / Year)')),
-                        DropdownMenuItem(value: 2, child: Text('دفعتان (2 Cheques / Every 6 Mos)')),
-                        DropdownMenuItem(value: 3, child: Text('3 دفعات (3 Cheques / Every 4 Mos)')),
-                        DropdownMenuItem(value: 4, child: Text('4 دفعات (4 Cheques / Quarterly)')),
-                        DropdownMenuItem(value: 6, child: Text('6 دفعات (6 Cheques / Bi-Monthly)')),
-                        DropdownMenuItem(value: 12, child: Text('12 دفعة (12 Cheques / Monthly)')),
+                        DropdownMenuItem(value: 1, child: Text('1 Cheque / Year')),
+                        DropdownMenuItem(value: 2, child: Text('2 Cheques (Semi-Annual)')),
+                        DropdownMenuItem(value: 3, child: Text('3 Cheques (Every 4 Months)')),
+                        DropdownMenuItem(value: 4, child: Text('4 Cheques (Quarterly)')),
+                        DropdownMenuItem(value: 6, child: Text('6 Cheques (Bi-Monthly)')),
+                        DropdownMenuItem(value: 12, child: Text('12 Cheques (Monthly)')),
                       ],
                       onChanged: (val) {
                         if (val != null) setDialogState(() => installmentsCount = val);
@@ -613,7 +619,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                     TextField(
                       controller: baseChequeNumCtrl,
                       decoration: const InputDecoration(
-                        labelText: 'رقم أول شيك كبداية تسلسل (Starting Cheque #)',
+                        labelText: 'Starting Cheque #',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.tag),
                       ),
@@ -623,7 +629,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                     TextField(
                       controller: bankCtrl,
                       decoration: const InputDecoration(
-                        labelText: 'اسم البنك (Bank Name)',
+                        labelText: 'Bank Name',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.account_balance),
                       ),
@@ -642,12 +648,12 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text('مبلغ كل شيك:', style: TextStyle(fontWeight: FontWeight.bold)),
-                              Text('${_currencyFormat.format(perInstallment)} د.إ', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
+                              const Text('Amount Per Cheque:', style: TextStyle(fontWeight: FontWeight.bold)),
+                              Text('${_currencyFormat.format(perInstallment)} AED', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
                             ],
                           ),
                           const Divider(),
-                          const Text('مواعيد الدفع المتوقعة:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          const Text('Expected Schedule:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 4),
                           ...List.generate(installmentsCount, (i) {
                             final monthsToAdd = ((12 / installmentsCount) * i).round();
@@ -656,10 +662,10 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                               padding: const EdgeInsets.symmetric(vertical: 2.0),
                               child: Row(
                                 children: [
-                                  Text('شيك ${i + 1}: ', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                  Text('Cheque ${i + 1}: ', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                                   Text(_dateFormat.format(due), style: const TextStyle(fontSize: 11, color: Colors.grey)),
                                   const Spacer(),
-                                  Text('${_currencyFormat.format(perInstallment)} د.إ', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                                  Text('${_currencyFormat.format(perInstallment)} AED', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
                                 ],
                               ),
                             );
@@ -671,7 +677,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
                   onPressed: () async {
@@ -699,25 +705,25 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                           contractCode: property.contractCode,
                           buildingName: property.buildingName,
                           unitNumber: property.unitNumber,
-                          notes: 'الدفعة ${i + 1} من أصل $installmentsCount',
+                          notes: 'Installment ${i + 1} of $installmentsCount',
                         ));
                       }
 
                       await _firestoreService.batchCreateCheques(generated);
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('تم توليد $installmentsCount شيكات بنجاح في جدول المواعيد ✅')),
+                          SnackBar(content: Text('Successfully generated $installmentsCount cheques in schedule ✅')),
                         );
                       }
                     } catch (e) {
                       if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ أثناء التوليد: $e')));
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error generating cheques: $e')));
                       }
                     } finally {
                       if (mounted) setState(() => _isLoading = false);
                     }
                   },
-                  child: const Text('تأكيد وتوليد الشيكات'),
+                  child: const Text('Confirm & Generate'),
                 ),
               ],
             );
@@ -890,9 +896,9 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
           indicatorColor: AppColors.primary,
           indicatorWeight: 3,
           tabs: const [
-            Tab(icon: Icon(Icons.payment), text: 'الشيكات والدفع'),
-            Tab(icon: Icon(Icons.description), text: 'العقود والعقارات'),
-            Tab(icon: Icon(Icons.folder_shared), text: 'المستندات والتنبيهات'),
+            Tab(icon: Icon(Icons.payment), text: 'Cheques & Payments'),
+            Tab(icon: Icon(Icons.description), text: 'Contracts & Units'),
+            Tab(icon: Icon(Icons.folder_shared), text: 'Documents & Alerts'),
           ],
         ),
       ),
@@ -989,7 +995,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                       ),
                       onPressed: () => _showAddChequeDialog(),
                       icon: const Icon(Icons.add, size: 20),
-                      label: const Text('إضافة شيك جديد', style: TextStyle(fontWeight: FontWeight.bold)),
+                      label: const Text('Add New Cheque', style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -1003,7 +1009,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                       ),
                       onPressed: _showGenerateInstallmentsDialog,
                       icon: const Icon(Icons.auto_awesome, size: 20, color: AppColors.accent),
-                      label: const Text('توليد الدفعات تلقائياً', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      label: const Text('Auto-Generate Installments', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     ),
                   ),
                 ],
@@ -1015,12 +1021,12 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _buildFilterChip('الكل ($totalCount)', 'all'),
-                    _buildFilterChip('قيد الانتظار', 'pending'),
-                    _buildFilterChip('مستحق قريباً', 'due_soon'),
-                    _buildFilterChip('مدفوع', 'paid'),
-                    _buildFilterChip('متأخر ($overdueCount)', 'overdue', isAlert: overdueCount > 0),
-                    _buildFilterChip('مرتجع', 'bounced'),
+                    _buildFilterChip('All ($totalCount)', 'all'),
+                    _buildFilterChip('Pending', 'pending'),
+                    _buildFilterChip('Due Soon', 'due_soon'),
+                    _buildFilterChip('Paid / Cleared', 'paid'),
+                    _buildFilterChip('Overdue ($overdueCount)', 'overdue', isAlert: overdueCount > 0),
+                    _buildFilterChip('Bounced', 'bounced'),
                   ],
                 ),
               ),
@@ -1041,12 +1047,12 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                       children: [
                         Icon(Icons.payment_outlined, size: 48, color: Colors.grey.shade400),
                         const SizedBox(height: 12),
-                        const Text('لا توجد شيكات تطابق هذا التصنيف', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                        const Text('No cheques match this filter', style: TextStyle(color: Colors.grey, fontSize: 16)),
                         const SizedBox(height: 8),
                         TextButton.icon(
                           onPressed: () => _showAddChequeDialog(),
                           icon: const Icon(Icons.add),
-                          label: const Text('أضف أول شيك الآن'),
+                          label: const Text('Add first cheque now'),
                         ),
                       ],
                     ),
@@ -1099,6 +1105,10 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
     required double pendingAmount,
     required int overdueCount,
   }) {
+    final hasLedgerBalance = _tenant.ledgerBalance != null;
+    final ledgerBalance = _tenant.ledgerBalance ?? 0.0;
+    final isLedgerSettled = ledgerBalance <= 0;
+
     return Card(
       elevation: 0,
       color: Colors.white,
@@ -1113,11 +1123,11 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
             Row(
               children: [
                 Expanded(
-                  child: _buildStatItem('إجمالي الشيكات', '$totalCount شيك', AppColors.primary, Icons.receipt_long),
+                  child: _buildStatItem('Total Cheques', '$totalCount Cheques', AppColors.primary, Icons.receipt_long),
                 ),
                 Container(width: 1, height: 40, color: Colors.grey.shade300),
                 Expanded(
-                  child: _buildStatItem('إجمالي القيمة', '${_currencyFormat.format(totalAmount)} د.إ', Colors.blue.shade800, Icons.monetization_on),
+                  child: _buildStatItem('Total Amount', '${_currencyFormat.format(totalAmount)} AED', Colors.blue.shade800, Icons.monetization_on),
                 ),
               ],
             ),
@@ -1125,18 +1135,81 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
             Row(
               children: [
                 Expanded(
-                  child: _buildStatItem('تم الصرف / مدفوع', '${_currencyFormat.format(paidAmount)} د.إ', Colors.green.shade700, Icons.check_circle),
+                  child: _buildStatItem('Cleared / Paid', '${_currencyFormat.format(paidAmount)} AED', Colors.green.shade700, Icons.check_circle),
                 ),
                 Container(width: 1, height: 40, color: Colors.grey.shade300),
                 Expanded(
                   child: _buildStatItem(
-                    'المتبقي للدفع',
-                    '${_currencyFormat.format(pendingAmount)} د.إ',
+                    'Pending Payment',
+                    '${_currencyFormat.format(pendingAmount)} AED',
                     overdueCount > 0 ? Colors.red.shade700 : Colors.orange.shade800,
                     Icons.schedule,
                   ),
                 ),
               ],
+            ),
+
+            // General Ledger (دفتر الأستاذ) Outstanding Dues Card
+            const Divider(height: 24),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: isLedgerSettled ? Colors.green.shade50 : Colors.red.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isLedgerSettled ? Colors.green.shade300 : Colors.red.shade300,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    isLedgerSettled ? Icons.verified_user : Icons.warning_amber_rounded,
+                    color: isLedgerSettled ? Colors.green.shade800 : Colors.red.shade800,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'General Ledger Dues (دفتر الأستاذ)',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: isLedgerSettled ? Colors.green.shade900 : Colors.red.shade900,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          isLedgerSettled
+                              ? 'No Outstanding Dues (Balance: 0.00 AED) ✅'
+                              : 'Outstanding Dues: ${_currencyFormat.format(ledgerBalance)} AED ⚠️',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: isLedgerSettled ? Colors.green.shade800 : Colors.red.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (hasLedgerBalance && _tenant.totalDebit != null && _tenant.totalCredit != null)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'Debit: ${_currencyFormat.format(_tenant.totalDebit!)} AED',
+                          style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                        ),
+                        Text(
+                          'Credit: ${_currencyFormat.format(_tenant.totalCredit!)} AED',
+                          style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
             ),
           ],
         ),
@@ -1173,17 +1246,17 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
     Color alertText;
 
     if (cheque.isOverdue) {
-      timingText = '⚠️ متأخر عن موعد الدفع بـ ${-days} يوماً!';
+      timingText = '⚠️ Payment overdue by ${-days} days!';
       alertBg = Colors.red.shade50;
       alertBorder = Colors.red.shade400;
       alertText = Colors.red.shade900;
     } else if (days == 0) {
-      timingText = '🔔 موعد الدفع مستحق اليوم!';
+      timingText = '🔔 Payment is due today!';
       alertBg = Colors.amber.shade50;
       alertBorder = Colors.amber.shade500;
       alertText = Colors.amber.shade900;
     } else {
-      timingText = '⏳ أقرب موعد دفع قادم: متبقي $days يوماً (${_dateFormat.format(cheque.dueDate)})';
+      timingText = '⏳ Next payment due in $days days (${_dateFormat.format(cheque.dueDate)})';
       alertBg = Colors.blue.shade50;
       alertBorder = Colors.blue.shade300;
       alertText = Colors.blue.shade900;
@@ -1210,7 +1283,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'شيك #${cheque.chequeNumber} (${cheque.bankName}) - بمبلغ ${_currencyFormat.format(cheque.amount)} د.إ',
+                  'Cheque #${cheque.chequeNumber} (${cheque.bankName}) - Amount: ${_currencyFormat.format(cheque.amount)} AED',
                   style: TextStyle(fontSize: 13, color: Colors.grey.shade800, fontWeight: FontWeight.w600),
                 ),
               ],
@@ -1224,7 +1297,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             onPressed: () => _toggleChequePaid(cheque),
-            child: const Text('صرف الشيك', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            child: const Text('Clear Cheque', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -1237,19 +1310,19 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
 
     if (cheque.isPaid) {
       badgeColor = Colors.green;
-      badgeText = 'تم الصرف ✅';
+      badgeText = 'Cleared / Paid ✅';
     } else if (cheque.isBounced) {
       badgeColor = Colors.red;
-      badgeText = 'مرتجع ❌';
+      badgeText = 'Bounced ❌';
     } else if (cheque.isOverdue) {
       badgeColor = Colors.red.shade900;
-      badgeText = 'متأخر (${-cheque.daysUntilDue} يوم)';
+      badgeText = 'Overdue (${-cheque.daysUntilDue} days)';
     } else if (cheque.isDueSoon) {
       badgeColor = Colors.amber.shade900;
-      badgeText = 'مستحق قريباً (${cheque.daysUntilDue} يوم)';
+      badgeText = 'Due Soon (${cheque.daysUntilDue} days)';
     } else {
       badgeColor = Colors.blueGrey;
-      badgeText = 'قيد الانتظار (${cheque.daysUntilDue} يوم)';
+      badgeText = 'Pending (${cheque.daysUntilDue} days)';
     }
 
     return Card(
@@ -1290,7 +1363,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'شيك رقم: ${cheque.chequeNumber}',
+                        'Cheque No: ${cheque.chequeNumber}',
                         style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w500),
                       ),
                     ],
@@ -1312,17 +1385,17 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
             ),
             const Divider(height: 24),
 
-            // Middle Row: Amount & Due Date (وقت الدفع)
+            // Middle Row: Amount & Due Date
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('المبلغ (Amount)', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    const Text('Amount', style: TextStyle(fontSize: 12, color: Colors.grey)),
                     const SizedBox(height: 2),
                     Text(
-                      '${_currencyFormat.format(cheque.amount)} د.إ',
+                      '${_currencyFormat.format(cheque.amount)} AED',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -1334,7 +1407,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    const Text('وقت وتاريخ الاستحقاق (Due Date)', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    const Text('Due Date', style: TextStyle(fontSize: 12, color: Colors.grey)),
                     const SizedBox(height: 2),
                     Row(
                       children: [
@@ -1365,7 +1438,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                       const Icon(Icons.apartment, size: 14, color: Colors.grey),
                       const SizedBox(width: 4),
                       Text(
-                        '${cheque.buildingName ?? ""} - شقة ${cheque.unitNumber}',
+                        '${cheque.buildingName ?? ""} - Apt ${cheque.unitNumber}',
                         style: const TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                       const SizedBox(width: 12),
@@ -1398,18 +1471,18 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                   ),
                   onPressed: () => _toggleChequePaid(cheque),
                   icon: Icon(cheque.isPaid ? Icons.undo : Icons.check_circle, size: 16),
-                  label: Text(cheque.isPaid ? 'إعادة كغير مدفوع' : 'صرف الشيك (مدفوع)'),
+                  label: Text(cheque.isPaid ? 'Mark as Unpaid' : 'Clear Cheque (Paid)'),
                 ),
                 const SizedBox(width: 8),
                 IconButton(
                   icon: const Icon(Icons.edit, size: 20, color: AppColors.primary),
-                  tooltip: 'تعديل',
+                  tooltip: 'Edit',
                   onPressed: () => _showEditChequeDialog(cheque),
                   visualDensity: VisualDensity.compact,
                 ),
                 IconButton(
                   icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                  tooltip: 'حذف',
+                  tooltip: 'Delete',
                   onPressed: () => _deleteCheque(cheque),
                   visualDensity: VisualDensity.compact,
                 ),

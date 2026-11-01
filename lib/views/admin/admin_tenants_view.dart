@@ -368,7 +368,7 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
                                 ).then((_) => _fetchTenants());
                               },
                               icon: const Icon(Icons.receipt_long, size: 16),
-                              label: const Text('العقود والشيكات'),
+                              label: const Text('Contracts & Cheques'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primary,
                                 foregroundColor: Colors.white,

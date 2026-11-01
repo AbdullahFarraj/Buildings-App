@@ -17,6 +17,9 @@ class UserModel {
   final List<Map<String, String>>? documents;
   final String? fcmToken;
   final List<TenantProperty>? properties;
+  final double? ledgerBalance;
+  final double? totalDebit;
+  final double? totalCredit;
 
   UserModel({
     required this.uid,
@@ -35,6 +38,9 @@ class UserModel {
     this.documents,
     this.fcmToken,
     this.properties,
+    this.ledgerBalance,
+    this.totalDebit,
+    this.totalCredit,
   });
 
   /// Returns all properties rented by this tenant, falling back to legacy single building/apt fields
@@ -95,6 +101,9 @@ class UserModel {
           .toList(),
       fcmToken: map['fcmToken'],
       properties: parsedProperties,
+      ledgerBalance: (map['ledgerBalance'] as num?)?.toDouble(),
+      totalDebit: (map['totalDebit'] as num?)?.toDouble(),
+      totalCredit: (map['totalCredit'] as num?)?.toDouble(),
     );
   }
 
@@ -116,6 +125,9 @@ class UserModel {
       if (fcmToken != null) 'fcmToken': fcmToken,
       if (properties != null)
         'properties': properties!.map((p) => p.toMap()).toList(),
+      if (ledgerBalance != null) 'ledgerBalance': ledgerBalance,
+      if (totalDebit != null) 'totalDebit': totalDebit,
+      if (totalCredit != null) 'totalCredit': totalCredit,
     };
   }
 
@@ -136,6 +148,9 @@ class UserModel {
     List<Map<String, String>>? documents,
     String? fcmToken,
     List<TenantProperty>? properties,
+    double? ledgerBalance,
+    double? totalDebit,
+    double? totalCredit,
   }) {
     return UserModel(
       uid: uid ?? this.uid,
@@ -154,6 +169,9 @@ class UserModel {
       documents: documents ?? this.documents,
       fcmToken: fcmToken ?? this.fcmToken,
       properties: properties ?? this.properties,
+      ledgerBalance: ledgerBalance ?? this.ledgerBalance,
+      totalDebit: totalDebit ?? this.totalDebit,
+      totalCredit: totalCredit ?? this.totalCredit,
     );
   }
 }

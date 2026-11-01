@@ -149,9 +149,10 @@ async function runSync() {
     const rows = result.recordset;
     console.log(`📋 تم استرجاع ${rows.length} عقداً من قاعدة البيانات.`);
 
-    console.log('⏳ جاري استرجاع جميع الشيكات المرتبطة بالعقود (جدول Checks)...');
+    console.log('⏳ جاري استرجاع جميع الشيكات المرتبطة بالعقود (جدول Checks و ChecksCollection)...');
     const chequesQuery = `
       SELECT 
+          c.Guid                         AS checkGuid,
           LTRIM(RTRIM(c.NO))             AS chequeNumber,
           c.Value                        AS amount,
           c.DueDate                      AS dueDate,
@@ -159,13 +160,41 @@ async function runSync() {
           LTRIM(RTRIM(c.BankName))       AS bankName,
           LTRIM(RTRIM(c.Note))           AS notes,
           c.ContractGuid                 AS contractGuid,
-          c.Deposition                   AS isDeposited
+          CASE 
+            WHEN c.Deposition = 1 THEN 1
+            WHEN EXISTS (SELECT 1 FROM ChecksCollection col WHERE col.CheckGuid = c.Guid AND col.Kind = 1) THEN 1
+            ELSE 0 
+          END                            AS isDeposited,
+          (SELECT TOP 1 col.Date FROM ChecksCollection col WHERE col.CheckGuid = c.Guid AND col.Kind = 1) AS depositDate
       FROM Checks c
       WHERE c.ContractGuid IS NOT NULL;
     `;
     const chequesResult = await pool.request().query(chequesQuery);
     const chequesRows = chequesResult.recordset;
     console.log(`💳 تم استرجاع ${chequesRows.length} شيكاً من قاعدة البيانات.`);
+
+    console.log('⏳ جاري استرجاع أرصدة المستأجرين من دفتر الأستاذ (General Ledger)...');
+    const ledgerQuery = `
+      SELECT 
+          c.Guid AS customerGuid,
+          ROUND(ISNULL(SUM(de.DDebit), 0) - ISNULL(SUM(de.DCredit), 0), 2) AS ledgerBalance,
+          ROUND(ISNULL(SUM(de.DDebit), 0), 2) AS totalDebit,
+          ROUND(ISNULL(SUM(de.DCredit), 0), 2) AS totalCredit
+      FROM Customer c
+      INNER JOIN vwDetailEntry de ON de.AcGuid = c.AcGuid
+      GROUP BY c.Guid;
+    `;
+    const ledgerResult = await pool.request().query(ledgerQuery);
+    const ledgerByCustomerGuid = new Map();
+    for (const row of ledgerResult.recordset) {
+      if (!row.customerGuid) continue;
+      ledgerByCustomerGuid.set(String(row.customerGuid).toLowerCase(), {
+        ledgerBalance: Number(row.ledgerBalance) || 0,
+        totalDebit: Number(row.totalDebit) || 0,
+        totalCredit: Number(row.totalCredit) || 0,
+      });
+    }
+    console.log(`📒 تم استرجاع أرصدة دفتر الأستاذ لـ ${ledgerByCustomerGuid.size} عميلاً.`);
 
     // Group cheques by contractGuid
     const chequesByContractGuid = new Map();
@@ -539,6 +568,7 @@ async function runSync() {
             dueDate: toMiddayTimestamp(ch.dueDate),
             date: toMiddayTimestamp(ch.date),
             status: isPaid ? 'paid' : 'pending',
+            depositDate: toMiddayTimestamp(ch.depositDate),
             contractCode: c.contractCode || '',
             contractNumber: c.contractNumber || null,
             buildingName: (c.buildingName || '').trim(),
@@ -550,6 +580,20 @@ async function runSync() {
           currentBatchOps++;
           chequesSyncedCount++;
           await commitBatchIfNeeded(false);
+        }
+      }
+
+      // Calculate tenant ledger totals across all their customerGuids
+      const customerGuids = [...new Set(group.contracts.map(c => c.customerGuid ? String(c.customerGuid).toLowerCase() : null).filter(Boolean))];
+      let tenantLedgerBalance = 0;
+      let tenantTotalDebit = 0;
+      let tenantTotalCredit = 0;
+      for (const cg of customerGuids) {
+        const l = ledgerByCustomerGuid.get(cg);
+        if (l) {
+          tenantLedgerBalance += l.ledgerBalance;
+          tenantTotalDebit += l.totalDebit;
+          tenantTotalCredit += l.totalCredit;
         }
       }
 
@@ -587,6 +631,9 @@ async function runSync() {
         yearValue: properties.reduce((sum, p) => sum + (p.yearValue || 0), 0),
         unitType: properties.map(p => p.unitType).filter(Boolean).join(', '),
         contractsCount: properties.length,
+        ledgerBalance: Math.round(tenantLedgerBalance * 100) / 100,
+        totalDebit: Math.round(tenantTotalDebit * 100) / 100,
+        totalCredit: Math.round(tenantTotalCredit * 100) / 100,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       };
       currentBatch.set(userRef, userData, { merge: true });

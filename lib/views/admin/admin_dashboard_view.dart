@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../../services/firestore_service.dart';
 import '../../models/maintenance_task_model.dart';
@@ -56,6 +57,24 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
   StreamSubscription<List<NotificationModel>>? _notificationSub;
   final Set<String> _seenNotificationIds = {};
   bool _isInitialNotificationLoad = true;
+
+  DateTime? _lastSeenRequestsAt;
+  final Set<String> _seenPendingTaskIds = {};
+
+  void _markRequestsSeen([List<MaintenanceTaskModel>? tasks]) {
+    _lastSeenRequestsAt = DateTime.now();
+    if (tasks != null) {
+      for (final task in tasks) {
+        _seenPendingTaskIds.add(task.id);
+      }
+    }
+    final uid = _adminUser?.uid ?? _auth.currentUser?.uid;
+    if (uid != null) {
+      _firestoreService.updateUser(uid, {
+        'lastSeenRequestsAt': FieldValue.serverTimestamp(),
+      }).catchError((_) {});
+    }
+  }
 
   @override
   void initState() {
@@ -115,7 +134,10 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
         if (notification.title.contains('Chat') || notification.title.contains('Message')) {
           setState(() => _selectedIndex = 4);
         } else {
-          setState(() => _selectedIndex = 1);
+          setState(() {
+            _selectedIndex = 1;
+            _markRequestsSeen();
+          });
         }
       },
     );
@@ -124,6 +146,15 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
   Future<void> _loadAdminData([String? directUid]) async {
     final uid = directUid ?? _auth.currentUser?.uid;
     if (uid != null) {
+      try {
+        final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        if (doc.exists && doc.data() != null) {
+          final rawLastSeen = doc.data()!['lastSeenRequestsAt'];
+          if (rawLastSeen is Timestamp) {
+            _lastSeenRequestsAt = rawLastSeen.toDate();
+          }
+        }
+      } catch (_) {}
       final user = await _firestoreService.getUser(uid);
       if (mounted) {
         setState(() {
@@ -300,6 +331,11 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
         }
 
         var tasks = snapshot.data ?? [];
+        if (_selectedIndex == 1 && tasks.isNotEmpty) {
+          for (final t in tasks) {
+            _seenPendingTaskIds.add(t.id);
+          }
+        }
 
         // Client-side filtering
         if (_selectedFilter != 'All') {
@@ -338,7 +374,10 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
               onTap: (task.status == TaskStatus.pending ||
                       task.status == TaskStatus.assigned ||
                       task.status == TaskStatus.onHold)
-                  ? () => _showAssignBottomSheet(context, task)
+                  ? () {
+                      _seenPendingTaskIds.add(task.id);
+                      _showAssignBottomSheet(context, task);
+                    }
                   : null,
               onRejectTap: () => _handleAdminReject(task),
               onDeleteTap: () => _handleAdminDelete(task),
@@ -439,7 +478,14 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
       body: _selectedIndex == 0
           ? AdminOverviewTab(
               firestoreService: _firestoreService,
-              onNavigate: (index) => setState(() => _selectedIndex = index),
+              onNavigate: (index) {
+                setState(() {
+                  _selectedIndex = index;
+                  if (index == 1) {
+                    _markRequestsSeen();
+                  }
+                });
+              },
             )
           : _selectedIndex == 1 
               ? _buildRequestsView() 
@@ -471,7 +517,14 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
           : null,
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
-        onTap: (index) => setState(() => _selectedIndex = index),
+        onTap: (index) {
+          setState(() {
+            _selectedIndex = index;
+            if (index == 1) {
+              _markRequestsSeen();
+            }
+          });
+        },
         items: [
           const BottomNavigationBarItem(
             icon: Icon(Icons.dashboard),
@@ -482,10 +535,25 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
               stream: _firestoreService.getAllTasksForAdmin(),
               builder: (context, snapshot) {
                 final tasks = snapshot.data ?? [];
-                final pendingCount = tasks.where((t) => t.status == TaskStatus.pending).length;
+                if (_selectedIndex == 1) {
+                  for (final t in tasks) {
+                    _seenPendingTaskIds.add(t.id);
+                  }
+                }
+                final unseenPendingCount = tasks.where((t) {
+                  if (t.status != TaskStatus.pending) return false;
+                  if (_seenPendingTaskIds.contains(t.id)) return false;
+                  if (_lastSeenRequestsAt != null && !t.createdAt.isAfter(_lastSeenRequestsAt!)) {
+                    return false;
+                  }
+                  return true;
+                }).length;
+
+                final showBadge = _selectedIndex != 1 && unseenPendingCount > 0;
+
                 return Badge(
-                  isLabelVisible: pendingCount > 0,
-                  label: Text(pendingCount.toString()),
+                  isLabelVisible: showBadge,
+                  label: Text(unseenPendingCount.toString()),
                   child: const Icon(Icons.build),
                 );
               },

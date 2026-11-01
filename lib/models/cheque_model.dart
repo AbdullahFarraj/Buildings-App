@@ -14,6 +14,7 @@ class ChequeModel {
   final String? unitNumber;
   final String? notes;
   final String? chequeImageUrl;
+  final DateTime? depositDate;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -31,6 +32,7 @@ class ChequeModel {
     this.unitNumber,
     this.notes,
     this.chequeImageUrl,
+    this.depositDate,
     this.createdAt,
     this.updatedAt,
   });
@@ -111,6 +113,7 @@ class ChequeModel {
       unitNumber: data['unitNumber']?.toString(),
       notes: data['notes']?.toString(),
       chequeImageUrl: data['chequeImageUrl']?.toString(),
+      depositDate: parseNullableDate(data['depositDate']),
       createdAt: parseNullableDate(data['createdAt']),
       updatedAt: parseNullableDate(data['updatedAt']),
     );
@@ -130,6 +133,7 @@ class ChequeModel {
       if (unitNumber != null && unitNumber!.isNotEmpty) 'unitNumber': unitNumber,
       if (notes != null && notes!.isNotEmpty) 'notes': notes,
       if (chequeImageUrl != null && chequeImageUrl!.isNotEmpty) 'chequeImageUrl': chequeImageUrl,
+      if (depositDate != null) 'depositDate': Timestamp.fromDate(depositDate!),
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
@@ -149,6 +153,7 @@ class ChequeModel {
     String? unitNumber,
     String? notes,
     String? chequeImageUrl,
+    DateTime? depositDate,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -166,6 +171,7 @@ class ChequeModel {
       unitNumber: unitNumber ?? this.unitNumber,
       notes: notes ?? this.notes,
       chequeImageUrl: chequeImageUrl ?? this.chequeImageUrl,
+      depositDate: depositDate ?? this.depositDate,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
