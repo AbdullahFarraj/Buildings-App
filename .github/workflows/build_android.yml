@@ -1,4 +1,4 @@
-name: Build Android (APK)
+name: Build Android (APK & App Bundle)
 
 on:
   workflow_dispatch: # Allows manual trigger from GitHub Actions tab
@@ -11,7 +11,7 @@ on:
 
 jobs:
   build-android:
-    name: Build Android APK
+    name: Build Android Release
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -39,14 +39,26 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
-      # 5. Build Android APK (Release)
+      # 5. Build Android App Bundle (Google Play Release)
+      - name: Build Release App Bundle
+        run: flutter build appbundle --release
+
+      # 6. Build Android APK (Release)
       - name: Build Release APK
         run: flutter build apk --release
 
-      # 6. Upload APK Artifact
+      # 7. Upload App Bundle Artifact (for Google Play Console)
+      - name: Upload App Bundle Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Binshafar-Properties-AppBundle
+          path: build/app/outputs/bundle/release/app-release.aab
+          retention-days: 14
+
+      # 8. Upload APK Artifact (for direct testing)
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: EliteLiving-Android-APK
+          name: Binshafar-Properties-APK
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 14

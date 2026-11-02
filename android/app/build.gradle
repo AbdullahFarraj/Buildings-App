@@ -5,8 +5,14 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('key.properties')
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
-    namespace "com.example.building_app"
+    namespace "com.binshafar.properties"
     compileSdkVersion 36
     buildToolsVersion "36.0.0"
     ndkVersion flutter.ndkVersion
@@ -21,18 +27,29 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.example.building_app"
+        applicationId "com.binshafar.properties"
         minSdkVersion flutter.minSdkVersion
         targetSdkVersion 36
         versionCode 1
         versionName "1.0.0"
     }
 
+    signingConfigs {
+        release {
+            keyAlias keystoreProperties['keyAlias']
+            keyPassword keystoreProperties['keyPassword']
+            storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+            storePassword keystoreProperties['storePassword']
+        }
+    }
+
     buildTypes {
         release {
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            // When release signing configs are added via key.properties, update this block.
-            signingConfig signingConfigs.debug
+            if (keystoreProperties['storeFile'] && file(keystoreProperties['storeFile']).exists()) {
+                signingConfig signingConfigs.release
+            } else {
+                signingConfig signingConfigs.debug
+            }
         }
     }
 }

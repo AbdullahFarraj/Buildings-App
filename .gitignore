@@ -54,6 +54,10 @@ serviceAccountKey.json
 *.certSigningRequest
 *cert_base64*.txt
 .env*
+*.jks
+*.keystore
+key.properties
+**/android/key.properties
 
 # Node / Sync Service
 **/node_modules/
