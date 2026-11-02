@@ -65,4 +65,31 @@ class ContractModel {
       tenantUid: map['tenantUid'],
     );
   }
+
+  bool get isExpired {
+    if (endDate == null) return false;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return endDate!.isBefore(today);
+  }
+
+  bool get isExpiringSoon {
+    if (endDate == null || isExpired) return false;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final days = endDate!.difference(today).inDays;
+    return days >= 0 && days <= 60;
+  }
+
+  bool get isActive {
+    if (contractState.toLowerCase() == 'cancelled') return false;
+    return !isExpired;
+  }
+
+  int get daysUntilExpiry {
+    if (endDate == null) return 0;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return endDate!.difference(today).inDays;
+  }
 }

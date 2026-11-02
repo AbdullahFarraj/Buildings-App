@@ -242,7 +242,7 @@ class MaintenanceTaskCard extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text(
-                                'On Hold: Purchasing Materials / معلق لشراء المواد',
+                                'On Hold: Purchasing Materials',
                                 style: TextStyle(
                                   color: AppColors.statusOnHoldText,
                                   fontWeight: FontWeight.bold,
@@ -291,7 +291,7 @@ class MaintenanceTaskCard extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text(
-                                'Request Rejected by Management / تم رفض الطلب',
+                                'Request Rejected by Management',
                                 style: TextStyle(
                                   color: AppColors.statusRejectedText,
                                   fontWeight: FontWeight.bold,
@@ -381,7 +381,7 @@ class MaintenanceTaskCard extends StatelessWidget {
                 ],
 
                 // 5. Assigned Technician details & direct contact
-                if (task.technicianName != null && task.technicianName!.isNotEmpty) ...[
+                if (task.technicianName != null && task.technicianName!.isNotEmpty && userRole != UserRole.technician) ...[
                   const SizedBox(height: 10),
                   Row(
                     children: [
@@ -404,24 +404,22 @@ class MaintenanceTaskCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (userRole != UserRole.technician) ...[
-                        if (onCallTechnician != null)
-                          IconButton(
-                            icon: const Icon(Icons.phone_rounded, color: AppColors.primary, size: 18),
-                            onPressed: onCallTechnician,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                            tooltip: 'Call Technician',
-                          ),
-                        if (onWhatsAppTechnician != null)
-                          IconButton(
-                            icon: const Icon(Icons.chat_bubble_rounded, color: Colors.green, size: 18),
-                            onPressed: onWhatsAppTechnician,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                            tooltip: 'WhatsApp Technician',
-                          ),
-                      ],
+                      if (onCallTechnician != null)
+                        IconButton(
+                          icon: const Icon(Icons.phone_rounded, color: AppColors.primary, size: 18),
+                          onPressed: onCallTechnician,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          tooltip: 'Call Technician',
+                        ),
+                      if (onWhatsAppTechnician != null)
+                        IconButton(
+                          icon: const Icon(Icons.chat_bubble_rounded, color: Colors.green, size: 18),
+                          onPressed: onWhatsAppTechnician,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          tooltip: 'WhatsApp Technician',
+                        ),
                     ],
                   ),
                 ],
@@ -434,9 +432,9 @@ class MaintenanceTaskCard extends StatelessWidget {
                     children: [
                       const Icon(Icons.person_outline, size: 16, color: AppColors.textSecondary),
                       const SizedBox(width: 4),
-                      const Text(
-                        'Contact Tenant:',
-                        style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+                      Text(
+                        'Tenant (Apt ${task.apartmentNumber}):',
+                        style: const TextStyle(fontSize: 12, color: AppColors.textPrimary, fontWeight: FontWeight.w600),
                       ),
                       const Spacer(),
                       if (onCallTenant != null)
@@ -548,38 +546,21 @@ class MaintenanceTaskCard extends StatelessWidget {
     // TECHNICIAN ACTIONS
     if (userRole == UserRole.technician) {
       if (task.status == TaskStatus.assigned) {
+        if (onStartWorkTap == null) return const SizedBox.shrink();
         return Padding(
           padding: const EdgeInsets.only(top: 12),
-          child: Row(
-            children: [
-              if (onRescheduleTap != null)
-                Expanded(
-                  flex: 2,
-                  child: OutlinedButton.icon(
-                    onPressed: onRescheduleTap,
-                    icon: const Icon(Icons.schedule_rounded, size: 16),
-                    label: const Text('Reschedule / تأجيل'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                  ),
-                ),
-              if (onRescheduleTap != null && onStartWorkTap != null) const SizedBox(width: 8),
-              if (onStartWorkTap != null)
-                Expanded(
-                  flex: 3,
-                  child: ElevatedButton.icon(
-                    onPressed: onStartWorkTap,
-                    icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                    label: const Text('Start Work / بدء'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                  ),
-                ),
-            ],
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: onStartWorkTap,
+              icon: const Icon(Icons.play_arrow_rounded, size: 18),
+              label: const Text('Start Work'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+            ),
           ),
         );
       }
@@ -589,45 +570,30 @@ class MaintenanceTaskCard extends StatelessWidget {
           padding: const EdgeInsets.only(top: 12),
           child: Column(
             children: [
-              Row(
-                children: [
-                  if (onHoldTap != null)
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: onHoldTap,
-                        icon: const Icon(Icons.pause_circle_outline, color: AppColors.statusOnHoldText, size: 16),
-                        label: const Text(
-                          'Hold (Materials)',
-                          style: TextStyle(color: AppColors.statusOnHoldText, fontSize: 12),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: AppColors.statusOnHoldText),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                        ),
-                      ),
+              if (onHoldTap != null)
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: onHoldTap,
+                    icon: const Icon(Icons.pause_circle_outline, color: AppColors.statusOnHoldText, size: 16),
+                    label: const Text(
+                      'Hold (Materials)',
+                      style: TextStyle(color: AppColors.statusOnHoldText, fontSize: 12),
                     ),
-                  if (onHoldTap != null && onRescheduleTap != null) const SizedBox(width: 8),
-                  if (onRescheduleTap != null)
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: onRescheduleTap,
-                        icon: const Icon(Icons.calendar_month_rounded, size: 16),
-                        label: const Text('Reschedule', style: TextStyle(fontSize: 12)),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                        ),
-                      ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: AppColors.statusOnHoldText),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
-                ],
-              ),
+                  ),
+                ),
               if (onCompleteTap != null) ...[
-                const SizedBox(height: 8),
+                if (onHoldTap != null) const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     onPressed: onCompleteTap,
                     icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-                    label: const Text('Mark Completed / إنهاء المهمة'),
+                    label: const Text('Mark Completed'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.statusCompletedText,
                       foregroundColor: Colors.white,
@@ -642,36 +608,21 @@ class MaintenanceTaskCard extends StatelessWidget {
       }
 
       if (task.status == TaskStatus.onHold) {
+        if (onResumeTap == null) return const SizedBox.shrink();
         return Padding(
           padding: const EdgeInsets.only(top: 12),
-          child: Row(
-            children: [
-              if (onRescheduleTap != null)
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onRescheduleTap,
-                    icon: const Icon(Icons.calendar_month_rounded, size: 16),
-                    label: const Text('Reschedule'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                  ),
-                ),
-              if (onRescheduleTap != null && onResumeTap != null) const SizedBox(width: 8),
-              if (onResumeTap != null)
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: onResumeTap,
-                    icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                    label: const Text('Resume Work / استئناف'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                  ),
-                ),
-            ],
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: onResumeTap,
+              icon: const Icon(Icons.play_arrow_rounded, size: 18),
+              label: const Text('Resume Work'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+            ),
           ),
         );
       }
@@ -679,61 +630,46 @@ class MaintenanceTaskCard extends StatelessWidget {
 
     // TENANT ACTIONS
     if (userRole == UserRole.tenant) {
-      final canReschedule = task.status != TaskStatus.completed &&
-          task.status != TaskStatus.rejected &&
-          task.status != TaskStatus.waitingConfirmation;
-
-      return Padding(
-        padding: const EdgeInsets.only(top: 10),
-        child: Row(
-          children: [
-            if (canReschedule && onRescheduleTap != null)
-              OutlinedButton.icon(
-                onPressed: onRescheduleTap,
-                icon: const Icon(Icons.edit_calendar_rounded, size: 15),
-                label: const Text('Reschedule / تعديل الموعد', style: TextStyle(fontSize: 12)),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                ),
-              ),
-            const Spacer(),
-            if (task.status == TaskStatus.pending && onCancelTap != null)
-              TextButton.icon(
-                onPressed: onCancelTap,
-                icon: const Icon(Icons.close_rounded, size: 16),
-                label: const Text('Cancel Request', style: TextStyle(fontSize: 12)),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.statusRejectedText,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                ),
-              ),
-            if (task.status == TaskStatus.waitingConfirmation && onConfirmTap != null)
+      if (task.status == TaskStatus.waitingConfirmation && onConfirmTap != null) {
+        return Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Row(
+            children: [
+              const Spacer(),
               ElevatedButton.icon(
                 onPressed: onConfirmTap,
                 icon: const Icon(Icons.check_circle_rounded, size: 16),
-                label: const Text('Confirm & Rate / تأكيد وتقييم', style: TextStyle(fontSize: 12)),
+                label: const Text('Confirm & Rate', style: TextStyle(fontSize: 12)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.statusCompletedText,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 ),
               ),
-          ],
-        ),
-      );
+            ],
+          ),
+        );
+      }
+      return const SizedBox.shrink();
     }
 
     // ADMIN ACTIONS
     if (userRole == UserRole.admin) {
-      final canReject = task.status == TaskStatus.pending ||
+      final canAssign = task.status == TaskStatus.pending ||
           task.status == TaskStatus.assigned ||
           task.status == TaskStatus.onHold;
+      final canReject = task.status == TaskStatus.pending ||
+          task.status == TaskStatus.assigned ||
+          task.status == TaskStatus.inProgress ||
+          task.status == TaskStatus.onHold;
+
+      if (!canAssign && !canReject) return const SizedBox.shrink();
 
       return Padding(
         padding: const EdgeInsets.only(top: 10),
         child: Row(
           children: [
-            if (task.status == TaskStatus.pending || task.status == TaskStatus.assigned)
+            if (canAssign)
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: onTap,
@@ -747,31 +683,23 @@ class MaintenanceTaskCard extends StatelessWidget {
                   ),
                 ),
               ),
-            if (canReject && onRejectTap != null) ...[
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                onPressed: onRejectTap,
-                icon: const Icon(Icons.block_rounded, size: 15, color: AppColors.statusRejectedText),
-                label: const Text(
-                  'Reject / رفض',
-                  style: TextStyle(color: AppColors.statusRejectedText, fontSize: 12),
-                ),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.statusRejectedText),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            if (canAssign && canReject && onRejectTap != null) const SizedBox(width: 8),
+            if (canReject && onRejectTap != null)
+              Expanded(
+                flex: canAssign ? 1 : 2,
+                child: OutlinedButton.icon(
+                  onPressed: onRejectTap,
+                  icon: const Icon(Icons.block_rounded, size: 15, color: AppColors.statusRejectedText),
+                  label: const Text(
+                    'Reject',
+                    style: TextStyle(color: AppColors.statusRejectedText, fontSize: 12),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.statusRejectedText),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
                 ),
               ),
-            ],
-            if (onDeleteTap != null) ...[
-              const SizedBox(width: 4),
-              IconButton(
-                onPressed: onDeleteTap,
-                icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 18),
-                tooltip: 'Delete Request',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              ),
-            ],
           ],
         ),
       );
@@ -837,7 +765,7 @@ class MaintenanceTaskCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'Reschedule Visit / إعادة جدولة الموعد',
+                              'Reschedule Visit',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -887,7 +815,7 @@ class MaintenanceTaskCard extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text(
-                                  'Select Date / التاريخ',
+                                  'Select Date',
                                   style: TextStyle(fontSize: 11, color: AppColors.textHint),
                                 ),
                                 Text(
@@ -909,7 +837,7 @@ class MaintenanceTaskCard extends StatelessWidget {
 
                   const SizedBox(height: 16),
                   const Text(
-                    'Time Slot / الفترة الزمنية:',
+                    'Time Slot:',
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                   ),
                   const SizedBox(height: 8),
@@ -965,7 +893,7 @@ class MaintenanceTaskCard extends StatelessWidget {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     child: const Text(
-                      'Confirm Reschedule / تأكيد الموعد الجديد',
+                      'Confirm Reschedule',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -984,7 +912,7 @@ class MaintenanceTaskCard extends StatelessWidget {
     required MaintenanceTaskModel task,
     required Future<void> Function(String reason) onConfirm,
   }) async {
-    final textController = TextEditingController(text: 'شراء قطع غيار ومواد صيانة');
+    final textController = TextEditingController(text: 'Purchasing replacement parts & materials');
 
     await showDialog(
       context: context,
@@ -1004,7 +932,7 @@ class MaintenanceTaskCard extends StatelessWidget {
               const SizedBox(width: 10),
               const Expanded(
                 child: Text(
-                  'Hold for Materials\nتعليق لشراء المواد',
+                  'Hold for Materials',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
@@ -1015,7 +943,7 @@ class MaintenanceTaskCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Please specify the materials or parts you need to purchase:\nحدد المواد أو القطع المطلوبة:',
+                'Please specify the materials or parts you need to purchase:',
                 style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
               ),
               const SizedBox(height: 12),
@@ -1034,19 +962,19 @@ class MaintenanceTaskCard extends StatelessWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogCtx),
-              child: const Text('Cancel / إلغاء'),
+              child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () async {
                 final reason = textController.text.trim();
                 Navigator.pop(dialogCtx);
-                await onConfirm(reason.isEmpty ? 'Waiting for materials / بانتظار شراء المواد' : reason);
+                await onConfirm(reason.isEmpty ? 'Waiting for materials' : reason);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.statusOnHoldText,
                 foregroundColor: Colors.white,
               ),
-              child: const Text('Confirm / تعليق الطلب'),
+              child: const Text('Confirm'),
             ),
           ],
         );
@@ -1062,10 +990,10 @@ class MaintenanceTaskCard extends StatelessWidget {
   }) async {
     final textController = TextEditingController();
     final quickReasons = [
-      'Tenant Responsibility / مسؤولية المستأجر',
-      'Out of Warranty or Scope / خارج نطاق الصيانة',
-      'Duplicate Request / طلب مكرر',
-      'Incorrect Details / بيانات غير صحيحة',
+      'Tenant Responsibility',
+      'Out of Warranty or Scope',
+      'Duplicate Request',
+      'Incorrect Details',
     ];
 
     await showDialog(
@@ -1088,7 +1016,7 @@ class MaintenanceTaskCard extends StatelessWidget {
                   const SizedBox(width: 10),
                   const Expanded(
                     child: Text(
-                      'Reject Request\nرفض طلب الصيانة',
+                      'Reject Request',
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -1105,7 +1033,7 @@ class MaintenanceTaskCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     const Text(
-                      'Quick Reason / اختر السبب:',
+                      'Select Reason:',
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                     ),
                     const SizedBox(height: 6),
@@ -1132,7 +1060,7 @@ class MaintenanceTaskCard extends StatelessWidget {
                       controller: textController,
                       maxLines: 2,
                       decoration: InputDecoration(
-                        hintText: 'Enter rejection reason / سبب الرفض...',
+                        hintText: 'Enter rejection reason...',
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                         filled: true,
                         fillColor: AppColors.background,
@@ -1144,7 +1072,7 @@ class MaintenanceTaskCard extends StatelessWidget {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(dialogCtx),
-                  child: const Text('Cancel / إلغاء'),
+                  child: const Text('Cancel'),
                 ),
                 ElevatedButton(
                   onPressed: () async {
@@ -1156,7 +1084,7 @@ class MaintenanceTaskCard extends StatelessWidget {
                     backgroundColor: Colors.red,
                     foregroundColor: Colors.white,
                   ),
-                  child: const Text('Reject / رفض'),
+                  child: const Text('Reject'),
                 ),
               ],
             );

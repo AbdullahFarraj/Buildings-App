@@ -139,12 +139,12 @@ async function runSync() {
           v.Guid                                AS contractGuid
       FROM vwLeaseApartment v
       LEFT JOIN Customer c ON v.CustomerGuid = c.Guid
-      WHERE LTRIM(RTRIM(v.ContractState)) = 'valid'
-        AND YEAR(v.ToDate) >= 2026
+      WHERE LTRIM(RTRIM(v.ContractState)) != 'Expired contract and terminated'
+        AND YEAR(v.ToDate) >= YEAR(GETDATE())
       ORDER BY v.CustName, v.BuildingName, v.FlatNo;
     `;
 
-    console.log('⏳ جاري استرجاع العقود النشطة مع الإيميلات الحقيقية لسنة 2026 وما بعدها...');
+    console.log('⏳ جاري استرجاع العقود النشطة للسنة الحالية وما بعدها...');
     const result = await pool.request().query(query);
     const rows = result.recordset;
     console.log(`📋 تم استرجاع ${rows.length} عقداً من قاعدة البيانات.`);
@@ -167,7 +167,8 @@ async function runSync() {
           END                            AS isDeposited,
           (SELECT TOP 1 col.Date FROM ChecksCollection col WHERE col.CheckGuid = c.Guid AND col.Kind = 1) AS depositDate
       FROM Checks c
-      WHERE c.ContractGuid IS NOT NULL;
+      WHERE c.ContractGuid IS NOT NULL
+        AND (c.DueDate IS NULL OR YEAR(c.DueDate) >= YEAR(GETDATE()));
     `;
     const chequesResult = await pool.request().query(chequesQuery);
     const chequesRows = chequesResult.recordset;

@@ -745,7 +745,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر فتح الرابط')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unable to open link')));
       }
     }
   }
@@ -778,9 +778,9 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
 
         await _firestoreService.updateUser(_tenant.uid, {'contractUrl': url});
         await _refreshTenant();
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم رفع ملف العقد بنجاح')));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Contract uploaded successfully')));
       } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ في الرفع: $e')));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload error: $e')));
       } finally {
         if (mounted) setState(() => _isLoading = false);
       }
@@ -788,25 +788,25 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
   }
 
   Future<void> _sendAlertNotification() async {
-    final titleCtrl = TextEditingController(text: 'تذكير بموعد استحقاق دفعة الشيك 🔔');
+    final titleCtrl = TextEditingController(text: 'Rent Payment Due Reminder 🔔');
     final msgCtrl = TextEditingController(
-      text: 'عزيزي ${_tenant.name}، نود تذكيركم بموعد استحقاق دفعة الإيجار القادمة. يرجى التأكد من توفر الرصيد الكافي.',
+      text: 'Dear ${_tenant.name}, this is a reminder regarding your upcoming rent payment. Please ensure sufficient funds are available.',
     );
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('إرسال إشعار / تنبيه للمستأجر'),
+        title: const Text('Send Notification to Tenant'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'عنوان الإشعار', border: OutlineInputBorder())),
+            TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Notification Title', border: OutlineInputBorder())),
             const SizedBox(height: 12),
-            TextField(controller: msgCtrl, maxLines: 3, decoration: const InputDecoration(labelText: 'نص الرسالة', border: OutlineInputBorder())),
+            TextField(controller: msgCtrl, maxLines: 3, decoration: const InputDecoration(labelText: 'Message Body', border: OutlineInputBorder())),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
             onPressed: () async {
@@ -822,14 +822,14 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                   'createdAt': FieldValue.serverTimestamp(),
                   'isRead': false,
                 });
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرسال الإشعار بنجاح')));
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Notification sent successfully')));
               } catch (e) {
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
               } finally {
                 if (mounted) setState(() => _isLoading = false);
               }
             },
-            child: const Text('إرسال الآن'),
+            child: const Text('Send Now'),
           ),
         ],
       ),
@@ -851,8 +851,8 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
             Text(_tenant.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             Text(
               _tenant.allProperties.isNotEmpty
-                  ? '${_tenant.allProperties.length} عقارات مؤجرة'
-                  : 'مستأجر',
+                  ? '${_tenant.allProperties.length} Rented Units'
+                  : 'Tenant',
               style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],
@@ -1149,7 +1149,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
               ],
             ),
 
-            // General Ledger (دفتر الأستاذ) Outstanding Dues Card
+            // General Ledger Outstanding Dues Card
             const Divider(height: 24),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1173,7 +1173,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'General Ledger Dues (دفتر الأستاذ)',
+                          'General Ledger Dues',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
@@ -1536,12 +1536,12 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'العقارات المؤجرة: ${properties.length} وحدة',
+                              'Rented Units: ${properties.length} Unit(s)',
                               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'العقود المسجلة في النظام: ${contracts.isNotEmpty ? contracts.length : properties.length} عقد',
+                              'Registered Contracts: ${contracts.isNotEmpty ? contracts.length : properties.length}',
                               style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
                             ),
                           ],
@@ -1561,7 +1561,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                 const Center(
                   child: Padding(
                     padding: EdgeInsets.all(32),
-                    child: Text('لا توجد عقود مسجلة لهذا المستأجر', style: TextStyle(color: Colors.grey)),
+                    child: Text('No registered contracts for this tenant', style: TextStyle(color: Colors.grey)),
                   ),
                 ),
               
@@ -1603,7 +1603,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                       Text(
-                        'شقة ${contract.unitNumber} ${contract.unitType.isNotEmpty ? "(${contract.unitType})" : ""}',
+                        'Unit ${contract.unitNumber} ${contract.unitType.isNotEmpty ? "(${contract.unitType})" : ""}',
                         style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
                       ),
                     ],
@@ -1617,7 +1617,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                     border: Border.all(color: isExpired ? Colors.red.shade300 : Colors.green.shade300),
                   ),
                   child: Text(
-                    isExpired ? 'منتهي' : 'ساري النشاط',
+                    isExpired ? 'Expired' : 'Active',
                     style: TextStyle(
                       color: isExpired ? Colors.red.shade900 : Colors.green.shade800,
                       fontWeight: FontWeight.bold,
@@ -1636,7 +1636,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('رمز / رقم العقد', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                      const Text('Contract Code / Number', style: TextStyle(fontSize: 11, color: Colors.grey)),
                       const SizedBox(height: 2),
                       Text(
                         contract.contractCode.isNotEmpty ? contract.contractCode : (contract.contractNumber?.toString() ?? 'N/A'),
@@ -1649,10 +1649,10 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('قيمة الإيجار السنوي', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                      const Text('Annual Rent Amount', style: TextStyle(fontSize: 11, color: Colors.grey)),
                       const SizedBox(height: 2),
                       Text(
-                        '${_currencyFormat.format(contract.rentAmount > 0 ? contract.rentAmount : contract.yearValue)} د.إ',
+                        '${_currencyFormat.format(contract.rentAmount > 0 ? contract.rentAmount : contract.yearValue)} AED',
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.green),
                       ),
                     ],
@@ -1669,10 +1669,10 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('تاريخ بداية العقد', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                      const Text('Contract Start Date', style: TextStyle(fontSize: 11, color: Colors.grey)),
                       const SizedBox(height: 2),
                       Text(
-                        contract.startDate != null ? _dateFormat.format(contract.startDate!) : 'غير محدد',
+                        contract.startDate != null ? _dateFormat.format(contract.startDate!) : 'Not Set',
                         style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                       ),
                     ],
@@ -1682,10 +1682,10 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('تاريخ نهاية العقد (الانتهاء)', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                      const Text('Contract Expiry Date', style: TextStyle(fontSize: 11, color: Colors.grey)),
                       const SizedBox(height: 2),
                       Text(
-                        contract.endDate != null ? _dateFormat.format(contract.endDate!) : 'غير محدد',
+                        contract.endDate != null ? _dateFormat.format(contract.endDate!) : 'Not Set',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
@@ -1712,7 +1712,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                     Icon(Icons.hourglass_bottom, size: 14, color: Colors.amber.shade900),
                     const SizedBox(width: 4),
                     Text(
-                      'متبقي على نهاية العقد: $daysRemaining يوماً',
+                      'Remaining on Lease: $daysRemaining day(s)',
                       style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
                     ),
                   ],
@@ -1727,7 +1727,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                 TextButton.icon(
                   onPressed: () => _showAddChequeDialog(preselectedContract: contract),
                   icon: const Icon(Icons.add_card, size: 18),
-                  label: const Text('إضافة شيك لهذا العقد'),
+                  label: const Text('Add Cheque to Contract'),
                 ),
               ],
             ),
@@ -1752,20 +1752,20 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                 const Icon(Icons.apartment, color: AppColors.primary),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text('${prop.buildingName} - شقة ${prop.unitNumber}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  child: Text('${prop.buildingName} - Unit ${prop.unitNumber}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 ),
                 if (prop.rentAmount != null && prop.rentAmount! > 0)
-                  Text('${_currencyFormat.format(prop.rentAmount!)} د.إ', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                  Text('${_currencyFormat.format(prop.rentAmount!)} AED', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
               ],
             ),
             const Divider(height: 20),
             Row(
               children: [
                 Expanded(
-                  child: Text('البداية: ${prop.startDate != null ? _dateFormat.format(prop.startDate!) : "N/A"}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  child: Text('Start: ${prop.startDate != null ? _dateFormat.format(prop.startDate!) : "N/A"}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
                 ),
                 Expanded(
-                  child: Text('الانتهاء: ${prop.endDate != null ? _dateFormat.format(prop.endDate!) : "N/A"}', style: TextStyle(fontSize: 12, color: Colors.amber.shade900, fontWeight: FontWeight.bold)),
+                  child: Text('End: ${prop.endDate != null ? _dateFormat.format(prop.endDate!) : "N/A"}', style: TextStyle(fontSize: 12, color: Colors.amber.shade900, fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -1793,15 +1793,15 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('بيانات المستأجر والاتصال', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary)),
+                  const Text('Tenant & Contact Information', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary)),
                   const Divider(height: 24),
-                  _buildInfoRow(Icons.person, 'الاسم الكامل', _tenant.name),
+                  _buildInfoRow(Icons.person, 'Full Name', _tenant.name),
                   const SizedBox(height: 12),
-                  _buildInfoRow(Icons.phone, 'رقم الهاتف', _tenant.phone),
+                  _buildInfoRow(Icons.phone, 'Phone Number', _tenant.phone),
                   const SizedBox(height: 12),
-                  _buildInfoRow(Icons.email, 'البريد الإلكتروني', _tenant.email ?? 'غير محدد'),
+                  _buildInfoRow(Icons.email, 'Email Address', _tenant.email ?? 'Not Set'),
                   const SizedBox(height: 12),
-                  _buildInfoRow(Icons.fingerprint, 'معرف المستخدم (UID)', _tenant.uid),
+                  _buildInfoRow(Icons.fingerprint, 'User ID (UID)', _tenant.uid),
                 ],
               ),
             ),
@@ -1813,13 +1813,13 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: AppColors.border)),
             child: ListTile(
               leading: const Icon(Icons.picture_as_pdf, color: Colors.red, size: 32),
-              title: const Text('نسخة العقد الممسوحة ضوئياً (PDF)'),
-              subtitle: Text(_tenant.contractUrl != null ? 'تم رفع العقد (اضغط للعرض)' : 'لم يتم رفع ملف العقد حتى الآن'),
+              title: const Text('Scanned Contract Copy (PDF)'),
+              subtitle: Text(_tenant.contractUrl != null ? 'Contract uploaded (Tap to view)' : 'No contract file uploaded yet'),
               onTap: _tenant.contractUrl != null ? () => _openUrl(_tenant.contractUrl) : null,
               trailing: ElevatedButton(
                 onPressed: _uploadContractFile,
                 style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
-                child: const Text('رفع عقد'),
+                child: const Text('Upload Contract'),
               ),
             ),
           ),
@@ -1830,8 +1830,8 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: AppColors.border)),
             child: ListTile(
               leading: const Icon(Icons.notifications_active, color: AppColors.accent, size: 32),
-              title: const Text('إرسال تنبيه / تذكير بالدفع للمستأجر'),
-              subtitle: const Text('إشعار فوري يظهر في تطبيق المستأجر مباشرة'),
+              title: const Text('Send Payment Reminder to Tenant'),
+              subtitle: const Text('Direct push notification sent to tenant app'),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: _sendAlertNotification,
             ),
@@ -1843,8 +1843,8 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: AppColors.border)),
             child: ListTile(
               leading: const Icon(Icons.build_circle, color: Colors.blue, size: 32),
-              title: const Text('سجل طلبات الصيانة السابقة'),
-              subtitle: const Text('عرض جميع طلبات الصيانة المقدمة من هذا المستأجر'),
+              title: const Text('Maintenance History'),
+              subtitle: const Text('View all maintenance requests submitted by this tenant'),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: () {
                 Navigator.push(
@@ -1866,19 +1866,19 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: Colors.red.shade200)),
             child: ListTile(
               leading: const Icon(Icons.delete_forever, color: Colors.red, size: 32),
-              title: const Text('حذف حساب المستأجر', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-              subtitle: const Text('إلغاء وصول المستأجر وحذف بياناته من النظام'),
+              title: const Text('Delete Tenant Account', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+              subtitle: const Text('Revoke tenant access and remove account records'),
               onTap: () async {
                 final confirm = await showDialog<bool>(
                   context: context,
                   builder: (ctx) => AlertDialog(
-                    title: const Text('تأكيد حذف المستأجر'),
-                    content: Text('هل أنت متأكد من حذف ${_tenant.name}؟ هذا الإجراء سيوقف قدرته على استخدام التطبيق.'),
+                    title: const Text('Confirm Tenant Deletion'),
+                    content: Text('Are you sure you want to delete ${_tenant.name}? This will revoke their access to the app.'),
                     actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
                       TextButton(
                         onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text('حذف الحساب', style: TextStyle(color: Colors.red)),
+                        child: const Text('Delete Account', style: TextStyle(color: Colors.red)),
                       ),
                     ],
                   ),
@@ -1888,10 +1888,10 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                     await _firestoreService.deleteUser(_tenant.uid);
                     if (context.mounted) {
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف حساب المستأجر بنجاح')));
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tenant account deleted successfully')));
                     }
                   } catch (e) {
-                    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+                    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
                   }
                 }
               },

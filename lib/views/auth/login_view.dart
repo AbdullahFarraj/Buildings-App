@@ -118,6 +118,102 @@ class _LoginViewState extends State<LoginView> {
     }
   }
 
+  void _showDemoSelector() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.stars_rounded, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Choose Demo Role',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Select a pre-configured role to explore app features and screenshots.',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                ),
+                const SizedBox(height: 16),
+                _buildDemoOption(
+                  icon: Icons.home_work_outlined,
+                  title: 'Tenant (Unit 1404, Marina Crown)',
+                  subtitle: 'Alexander Wright - Tenant',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _applyDemoAccount('demo.tenant@elitelivingre.ae', 'Demo@123456');
+                  },
+                ),
+                const Divider(),
+                _buildDemoOption(
+                  icon: Icons.build_outlined,
+                  title: 'Technician (Maintenance Tasks)',
+                  subtitle: 'Rashid Al-Mansoor - Maintenance Technician',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _applyDemoAccount('demo.technician@elitelivingre.ae', 'Demo@123456');
+                  },
+                ),
+                const Divider(),
+                _buildDemoOption(
+                  icon: Icons.admin_panel_settings_outlined,
+                  title: 'Property Manager (Admin Dashboard)',
+                  subtitle: 'Property Manager - Admin Access',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _applyDemoAccount('demo.admin@elitelivingre.ae', 'Demo@123456');
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDemoOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+        child: Icon(icon, color: AppColors.primary),
+      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+      subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+      trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+      onTap: onTap,
+    );
+  }
+
+  void _applyDemoAccount(String email, String password) {
+    _emailController.text = email;
+    _passwordController.text = password;
+    _login();
+  }
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -132,37 +228,51 @@ class _LoginViewState extends State<LoginView> {
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
+            constraints: const BoxConstraints(maxWidth: 420),
             child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text(
-                        'Welcome to EliteLivingre',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Sign in to manage maintenance & properties.',
-                        style: TextStyle(color: AppColors.textSecondary),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 32),
+              elevation: 4,
+              clipBehavior: Clip.antiAlias,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/images/login_logo.png',
+                    width: double.infinity,
+                    height: 190,
+                    fit: BoxFit.cover,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(28, 20, 28, 28),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text(
+                            'Sign In',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Enter your credentials to access your account.',
+                            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 24),
                       TextFormField(
                         controller: _emailController,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           hintText: 'Email or Mobile Number',
-                          prefixIcon: Icon(Icons.person_outline),
+                          prefixIcon: const Icon(Icons.person_outline),
                         ),
                         keyboardType: TextInputType.emailAddress,
                         validator: (value) {
@@ -175,9 +285,9 @@ class _LoginViewState extends State<LoginView> {
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _passwordController,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           hintText: 'Password',
-                          prefixIcon: Icon(Icons.lock_outline),
+                          prefixIcon: const Icon(Icons.lock_outline),
                         ),
                         obscureText: true,
                         validator: (value) {
@@ -215,13 +325,42 @@ class _LoginViewState extends State<LoginView> {
                         style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
                         textAlign: TextAlign.center,
                       ),
+                      const SizedBox(height: 24),
+                      Row(
+                        children: [
+                          Expanded(child: Divider(color: Colors.grey.shade300)),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Text(
+                              'OR',
+                              style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          Expanded(child: Divider(color: Colors.grey.shade300)),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.explore_outlined, color: AppColors.primary),
+                        label: const Text(
+                          'Explore Demo Mode',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          side: const BorderSide(color: AppColors.primary),
+                        ),
+                        onPressed: _isLoading ? null : _showDemoSelector,
+                      ),
                     ],
                   ),
                 ),
               ),
-            ),
+            ],
           ),
         ),
+      ),
+    ),
       ),
     );
   }

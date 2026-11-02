@@ -290,7 +290,7 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
               );
             },
             icon: const Icon(Icons.receipt_long, color: AppColors.primary),
-            label: const Text('الشيكات والعقود', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+            label: const Text('Cheques & Contracts', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
           ),
         ],
       ),

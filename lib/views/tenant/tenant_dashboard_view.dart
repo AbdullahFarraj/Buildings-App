@@ -214,7 +214,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
               const SizedBox(height: 32),
 
               // Rent Cheques & Payment Schedule
-              _buildSectionTitle('Rent Cheques & Payment Dates (شيكات الإيجار ومواعيد الدفع)'),
+              _buildSectionTitle('Rent Cheques & Payment Dates'),
               const SizedBox(height: 12),
               _buildTenantChequesSection(user),
               const SizedBox(height: 32),
@@ -404,7 +404,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                nextDue.isOverdue ? 'دفعة متأخرة / Overdue Payment' : 'الدفعة القادمة وموعد الاستحقاق / Next Due Cheque',
+                                nextDue.isOverdue ? 'Overdue Payment' : 'Next Due Cheque',
                                 style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold),
                               ),
                               Text(
@@ -422,8 +422,8 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                           ),
                           child: Text(
                             nextDue.isOverdue
-                                ? 'متأخر ${-nextDue.daysUntilDue} يوم'
-                                : (nextDue.daysUntilDue == 0 ? 'مستحق اليوم' : 'بعد ${nextDue.daysUntilDue} يوم'),
+                                ? 'Overdue (${-nextDue.daysUntilDue} d)'
+                                : (nextDue.daysUntilDue == 0 ? 'Due Today' : 'In ${nextDue.daysUntilDue} days'),
                             style: TextStyle(
                               color: nextDue.isOverdue ? Colors.red.shade900 : AppColors.primary,
                               fontWeight: FontWeight.bold,
@@ -438,11 +438,11 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          '📅 وقت الدفع: ${dateFormat.format(nextDue.dueDate)}',
+                          '📅 Due Date: ${dateFormat.format(nextDue.dueDate)}',
                           style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
                         ),
                         Text(
-                          'شيك #${nextDue.chequeNumber} (${nextDue.bankName})',
+                          'Cheque #${nextDue.chequeNumber} (${nextDue.bankName})',
                           style: const TextStyle(color: Colors.white70, fontSize: 12),
                         ),
                       ],
@@ -467,9 +467,9 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                     Expanded(
                       child: Column(
                         children: [
-                          const Text('إجمالي الشيكات', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                          const Text('Total Cheques', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
                           const SizedBox(height: 2),
-                          Text('$totalCount شيك', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.primary)),
+                          Text('$totalCount Cheques', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.primary)),
                         ],
                       ),
                     ),
@@ -477,9 +477,9 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                     Expanded(
                       child: Column(
                         children: [
-                          const Text('المدفوع', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                          const Text('Paid', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
                           const SizedBox(height: 2),
-                          Text('${currencyFormat.format(paidAmount)} د.إ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.green)),
+                          Text('${currencyFormat.format(paidAmount)} AED', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.green)),
                         ],
                       ),
                     ),
@@ -487,10 +487,10 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                     Expanded(
                       child: Column(
                         children: [
-                          const Text('المتبقي للدفع', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                          const Text('Remaining', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
                           const SizedBox(height: 2),
                           Text(
-                            '${currencyFormat.format(pendingAmount)} د.إ',
+                            '${currencyFormat.format(pendingAmount)} AED',
                             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.amber.shade900),
                           ),
                         ],
@@ -516,12 +516,12 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                       Icon(Icons.payment_outlined, size: 40, color: Colors.grey),
                       SizedBox(height: 8),
                       Text(
-                        'لا توجد شيكات مسجلة حالياً',
+                        'No registered cheques currently',
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                       ),
                       SizedBox(height: 4),
                       Text(
-                        'ستظهر شيكات الإيجار ومواعيد استحقاق الدفع هنا فور تسجيلها من قبل الإدارة.',
+                        'Your rent cheques and due dates will appear here once recorded by property management.',
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                       ),
@@ -532,7 +532,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
             else
               ...cheques.map((c) {
                 Color statusColor = c.isPaid ? Colors.green : (c.isOverdue ? Colors.red : Colors.blueGrey);
-                String statusLabel = c.isPaid ? 'تم الصرف ✅' : (c.isOverdue ? 'متأخر ⚠️' : 'قيد الانتظار ⏳');
+                String statusLabel = c.isPaid ? 'Paid ✅' : (c.isOverdue ? 'Overdue ⚠️' : 'Pending ⏳');
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 12),
@@ -564,7 +564,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                     ),
                                     Text(
-                                      'شيك #${c.chequeNumber}',
+                                      'Cheque #${c.chequeNumber}',
                                       style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
                                     ),
                                   ],
@@ -591,9 +591,9 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text('المبلغ', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                  const Text('Amount', style: TextStyle(fontSize: 11, color: Colors.grey)),
                                   Text(
-                                    '${currencyFormat.format(c.amount)} د.إ',
+                                    '${currencyFormat.format(c.amount)} AED',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,
@@ -605,7 +605,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
-                                  const Text('وقت وتاريخ الاستحقاق للدفع', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                  const Text('Due Date', style: TextStyle(fontSize: 11, color: Colors.grey)),
                                   Row(
                                     children: [
                                       const Icon(Icons.calendar_today, size: 13, color: AppColors.accent),
@@ -622,7 +622,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                           ),
                           if (c.notes != null && c.notes!.isNotEmpty) ...[
                             const SizedBox(height: 8),
-                            Text('ملاحظة: ${c.notes!}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                            Text('Note: ${c.notes!}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                           ],
                         ],
                       ),
@@ -698,7 +698,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
     ChatSheet.show(
       context: context,
       chatId: user.uid,
-      chatTitle: 'Elite Living Management',
+      chatTitle: 'Saeed BinShafar Properties Management',
       currentUserId: user.uid,
       currentUserName: user.name,
       isDirectChat: true,
@@ -749,7 +749,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Elite Living Management',
+                        'Saeed BinShafar Properties Management',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 16,
@@ -828,7 +828,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                         onPressed: () {
                           ContactHelper.launchWhatsApp(
                             ContactHelper.supportPhone,
-                            text: 'Hello Elite Living Management, I am ${user.name} (Building: ${user.buildingId ?? 'N/A'}, Apt: ${user.apartmentId ?? 'N/A'}).',
+                            text: 'Hello Saeed BinShafar Properties Management, I am ${user.name} (Building: ${user.buildingId ?? 'N/A'}, Apt: ${user.apartmentId ?? 'N/A'}).',
                           );
                         },
                         icon: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF25D366), size: 18),
@@ -854,10 +854,30 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: () {
+                          final unit = (user.apartmentId ?? '').trim();
+                          final bldg = (user.buildingId ?? '').trim();
+                          final loc = [if (bldg.isNotEmpty) bldg, if (unit.isNotEmpty) 'Apt $unit'].join(' - ');
+
+                          final subject = loc.isNotEmpty
+                              ? 'Tenant Inquiry: ${user.name} ($loc)'
+                              : 'Tenant Inquiry: ${user.name}';
+
+                          final body = 'Dear Saeed BinShafar Properties Management,\n\n'
+                              'I am writing to inquire regarding my tenancy.\n\n'
+                              '--- Tenant Details ---\n'
+                              '• Name: ${user.name}\n'
+                              '• Building: ${bldg.isNotEmpty ? bldg : 'N/A'}\n'
+                              '• Apartment: ${unit.isNotEmpty ? unit : 'N/A'}\n'
+                              '${user.phone.trim().isNotEmpty ? '• Phone: ${user.phone.trim()}\n' : ''}'
+                              '\n--- Message / Inquiry ---\n'
+                              '[Please type your message or request here]\n\n\n'
+                              'Best regards,\n'
+                              '${user.name}';
+
                           ContactHelper.launchEmail(
                             ContactHelper.supportEmail,
-                            subject: 'Inquiry from ${user.name} - Apt ${user.apartmentId ?? ''}',
-                            body: 'Dear Management,\n\nTenant: ${user.name}\nBuilding: ${user.buildingId ?? ''}\nApartment: ${user.apartmentId ?? ''}\n\nMessage:\n',
+                            subject: subject,
+                            body: body,
                           );
                         },
                         icon: const Icon(Icons.email_outlined, color: Color(0xFF0284C7), size: 18),

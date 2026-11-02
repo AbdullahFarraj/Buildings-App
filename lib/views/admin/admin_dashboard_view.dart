@@ -275,31 +275,11 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
         await _firestoreService.rejectTask(taskId: task.id, reason: reason);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Request rejected successfully / تم رفض الطلب بنجاح')),
+            const SnackBar(content: Text('Request rejected successfully')),
           );
         }
       },
     );
-  }
-
-  void _handleAdminDelete(MaintenanceTaskModel task) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Request'),
-        content: const Text('Are you sure you want to delete this maintenance request?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Yes', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-    if (confirm == true) {
-      await _firestoreService.deleteTask(task.id);
-    }
   }
 
   void _openChat(MaintenanceTaskModel task) {
@@ -380,7 +360,6 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
                     }
                   : null,
               onRejectTap: () => _handleAdminReject(task),
-              onDeleteTap: () => _handleAdminDelete(task),
               onTenantInfoTap: () => _showTenantDetails(context, task.tenantId),
               onCommentsTap: () => _openChat(task),
               onCallTechnician: task.technicianId != null
@@ -410,26 +389,16 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _selectedIndex == 0 
-                  ? 'Overview'
-                  : _selectedIndex == 1 
-                      ? 'Maintenance Requests' 
-                      : _selectedIndex == 2
-                          ? 'Tenant Directory' 
-                          : _selectedIndex == 3
-                              ? 'Technicians'
-                              : 'Inbox / Messages',
-            ),
-            if (!_isLoadingUser && _adminUser != null)
-              Text(
-                'Welcome, ${_adminUser!.name}',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.normal),
-              ),
-          ],
+        title: Text(
+          _selectedIndex == 0 
+              ? 'Overview'
+              : _selectedIndex == 1 
+                  ? 'Maintenance Requests' 
+                  : _selectedIndex == 2
+                      ? 'Tenant Directory' 
+                      : _selectedIndex == 3
+                          ? 'Technicians'
+                          : 'Inbox / Messages',
         ),
         actions: [
           const NotificationsBell(),
@@ -526,8 +495,8 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
           });
         },
         items: [
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard),
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.dashboard),
             label: 'Overview',
           ),
           BottomNavigationBarItem(
@@ -560,12 +529,12 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
             ),
             label: 'Requests',
           ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.group),
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.group),
             label: 'Tenants',
           ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.engineering),
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.engineering),
             label: 'Technicians',
           ),
           BottomNavigationBarItem(

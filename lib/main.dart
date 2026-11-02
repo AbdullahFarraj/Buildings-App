@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -22,15 +23,29 @@ void main() async {
   runApp(const BuildingApp());
 }
 
+class AppScrollBehavior extends MaterialScrollBehavior {
+  const AppScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.stylus,
+      };
+}
+
 class BuildingApp extends StatelessWidget {
   const BuildingApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'EliteLivingre',
+      title: 'Saeed BinShafar Properties',
       debugShowCheckedModeBanner: false,
+      locale: const Locale('en'),
       theme: AppTheme.lightTheme,
+      scrollBehavior: const AppScrollBehavior(),
       home: const SplashView(),
     );
   }

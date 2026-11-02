@@ -82,30 +82,9 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
     await _firestoreService.updateTaskStatus(task.id, TaskStatus.inProgress);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Started work on task / تم بدء العمل')),
+        const SnackBar(content: Text('Started work on task')),
       );
     }
-  }
-
-  void _handleReschedule(MaintenanceTaskModel task) {
-    MaintenanceTaskCard.showRescheduleSheet(
-      context: context,
-      task: task,
-      roleLabel: 'technician',
-      onConfirm: (newDate, newSlot) async {
-        await _firestoreService.rescheduleTask(
-          taskId: task.id,
-          newDate: newDate,
-          newSlot: newSlot,
-          rescheduledByRole: 'technician',
-        );
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Visit rescheduled successfully / تم تحديث الموعد بنجاح')),
-          );
-        }
-      },
-    );
   }
 
   void _handleHoldForMaterials(MaintenanceTaskModel task) {
@@ -121,7 +100,7 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
         );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Task put on hold for materials / تم تعليق الطلب لشراء المواد')),
+            const SnackBar(content: Text('Task put on hold for materials')),
           );
         }
       },
@@ -136,7 +115,7 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
     );
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Work resumed / تم استئناف العمل')),
+        const SnackBar(content: Text('Work resumed')),
       );
     }
   }
@@ -205,7 +184,7 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Text(
-                    'Complete Task / إنهاء المهمة',
+                    'Complete Task',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -247,14 +226,14 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
                         }
                       },
                       icon: const Icon(Icons.camera_alt),
-                      label: const Text('Add Proof Photo (Optional) / صورة إثبات'),
+                      label: const Text('Add Proof Photo (Optional)'),
                     ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: notesController,
                     maxLines: 4,
                     decoration: InputDecoration(
-                      hintText: 'Add completion notes (optional) / ملاحظات الإنجاز',
+                      hintText: 'Add completion notes (optional)',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -304,7 +283,7 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
                       backgroundColor: AppColors.statusCompletedText,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
-                    child: const Text('Confirm Completion / تأكيد الإنجاز'),
+                    child: const Text('Confirm Completion'),
                   ),
                   const SizedBox(height: 24),
                 ],
@@ -348,7 +327,7 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
           if (tasks.isEmpty) {
             return const Center(
               child: Text(
-                'No pending assignments / لا توجد مهام حالية',
+                'No pending assignments',
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
               ),
             );
@@ -367,7 +346,6 @@ class _TechnicianHomeViewState extends State<TechnicianHomeView> {
                 onCompleteTap: () => _showCompletionDialog(task),
                 onHoldTap: () => _handleHoldForMaterials(task),
                 onResumeTap: () => _handleResumeWork(task),
-                onRescheduleTap: () => _handleReschedule(task),
                 onCallTenant: () => _callTenant(task.tenantId),
                 onWhatsAppTenant: () => _whatsappTenant(task.tenantId),
                 onCommentsTap: () => _openChat(task),

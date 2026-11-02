@@ -25,6 +25,11 @@ class _AdminContractsViewState extends State<AdminContractsView> {
 
   String _selectedBuilding = 'All Buildings';
   List<String> _buildings = ['All Buildings'];
+  String _selectedStatus = 'all';
+
+  int get _activeCount => _allContracts.where((c) => c.isActive).length;
+  int get _expiringSoonCount => _allContracts.where((c) => c.isExpiringSoon).length;
+  int get _expiredCount => _allContracts.where((c) => c.isExpired).length;
 
   final DateFormat _dateFormat = DateFormat('dd MMM yyyy');
 
@@ -48,7 +53,26 @@ class _AdminContractsViewState extends State<AdminContractsView> {
         _error = null;
       });
 
-      final contracts = await _firestoreService.getContracts();
+      final allContracts = await _firestoreService.getContracts();
+      final currentYear = DateTime.now().year;
+
+      // Filter strictly to current year and future (exclude all past years)
+      final contracts = allContracts.where((c) {
+        if (c.endDate == null) return true;
+        return c.endDate!.year >= currentYear;
+      }).toList();
+
+      contracts.sort((a, b) {
+        if (a.isActive && !b.isActive) return -1;
+        if (!a.isActive && b.isActive) return 1;
+        if (a.endDate == null) return 1;
+        if (b.endDate == null) return -1;
+        if (a.isActive) {
+          return a.endDate!.compareTo(b.endDate!);
+        } else {
+          return b.endDate!.compareTo(a.endDate!);
+        }
+      });
 
       final dynamicBuildings = contracts
           .map((c) => c.buildingName)
@@ -90,7 +114,16 @@ class _AdminContractsViewState extends State<AdminContractsView> {
         final matchesBuilding = _selectedBuilding == 'All Buildings' ||
             c.buildingName == _selectedBuilding;
 
-        return matchesQuery && matchesBuilding;
+        bool matchesStatus = true;
+        if (_selectedStatus == 'active') {
+          matchesStatus = c.isActive;
+        } else if (_selectedStatus == 'expiring_soon') {
+          matchesStatus = c.isExpiringSoon;
+        } else if (_selectedStatus == 'expired') {
+          matchesStatus = c.isExpired;
+        }
+
+        return matchesQuery && matchesBuilding && matchesStatus;
       }).toList();
     });
   }
@@ -137,7 +170,7 @@ class _AdminContractsViewState extends State<AdminContractsView> {
               );
             },
             icon: const Icon(Icons.payment, size: 18, color: AppColors.primary),
-            label: const Text('جميع الشيكات', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+            label: const Text('All Cheques', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -204,6 +237,18 @@ class _AdminContractsViewState extends State<AdminContractsView> {
                     }).toList(),
                   ),
                 ),
+                const SizedBox(height: 8),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildStatusChip('All (${_allContracts.length})', 'all'),
+                      _buildStatusChip('Active ($_activeCount)', 'active', color: Colors.green),
+                      _buildStatusChip('Expiring Soon ($_expiringSoonCount)', 'expiring_soon', color: Colors.orange),
+                      _buildStatusChip('Expired ($_expiredCount)', 'expired', color: Colors.red),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -213,6 +258,34 @@ class _AdminContractsViewState extends State<AdminContractsView> {
             child: _buildBody(),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildStatusChip(String label, String statusKey, {Color? color}) {
+    final isSelected = _selectedStatus == statusKey;
+    final chipColor = color ?? AppColors.primary;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8.0),
+      child: FilterChip(
+        label: Text(label),
+        selected: isSelected,
+        onSelected: (_) {
+          setState(() => _selectedStatus = statusKey);
+          _applyFilters();
+        },
+        selectedColor: chipColor.withValues(alpha: 0.15),
+        labelStyle: TextStyle(
+          color: isSelected ? chipColor : AppColors.textSecondary,
+          fontSize: 12,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+        ),
+        backgroundColor: Colors.white,
+        side: BorderSide(
+          color: isSelected ? chipColor : AppColors.border,
+          width: isSelected ? 1.5 : 1,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }
@@ -524,7 +597,7 @@ class _AdminContractsViewState extends State<AdminContractsView> {
                         }
                       },
                       icon: const Icon(Icons.receipt_long, size: 15),
-                      label: const Text('الشيكات', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      label: const Text('Cheques', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     ),
                     const SizedBox(width: 4),
                     if (contract.mobileNumber.isNotEmpty) ...[

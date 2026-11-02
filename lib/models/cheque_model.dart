@@ -62,14 +62,7 @@ class ChequeModel {
     return daysUntilDue >= 0 && daysUntilDue <= 15;
   }
 
-  String get displayStatusArabic {
-    if (isPaid) return 'تم الصرف';
-    if (isBounced) return 'مرتجع';
-    if (isCancelled) return 'ملغي';
-    if (isOverdue) return 'متأخر';
-    if (isDueSoon) return 'مستحق قريباً';
-    return 'قيد الانتظار';
-  }
+  String get displayStatusArabic => displayStatusEnglish;
 
   String get displayStatusEnglish {
     if (isPaid) return 'Paid';

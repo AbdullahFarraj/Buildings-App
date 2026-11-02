@@ -27,11 +27,31 @@ service firebase.storage {
       );
     }
 
-    function isValidSize() {
+    function isDemoUser() {
+      return isAuthenticated() && (
+        (request.auth.token.email != null && request.auth.token.email.matches('^demo\\..*')) ||
+        request.auth.token.get('isDemo', false) == true
+      );
+    }
+
+    function isValidDocSize() {
       return request.resource != null && request.resource.size < 25 * 1024 * 1024;
     }
 
-    function isAllowedFile() {
+    function isValidImageSize() {
+      return request.resource != null && request.resource.size < 5 * 1024 * 1024;
+    }
+
+    function isValidChatSize() {
+      return request.resource != null && request.resource.size < 10 * 1024 * 1024;
+    }
+
+    function isImageFile() {
+      return request.resource.contentType != null
+          && request.resource.contentType.matches('image/.*');
+    }
+
+    function isDocOrImageFile() {
       return request.resource.contentType == null
           || request.resource.contentType.matches('image/.*')
           || request.resource.contentType == 'application/pdf'
@@ -40,11 +60,11 @@ service firebase.storage {
           || request.resource.contentType == 'application/octet-stream';
     }
 
-    // 1. العقود (contracts) - يقرؤها صاحب العقد أو الأدمن، ويرفعها/يحذفها الأدمن فقط
+    // 1. العقود (contracts) - بدقة عالية حتى 25MB ويقرؤها وينزلها صاحب العقد أو الأدمن
     match /contracts/{userId}/{fileName} {
       allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
-      allow create, update: if isAdmin() && isValidSize() && isAllowedFile();
-      allow delete: if isAdmin();
+      allow create, update: if isAdmin() && !isDemoUser() && isValidDocSize() && isDocOrImageFile();
+      allow delete: if isAdmin() && !isDemoUser();
     }
 
     // 2. مستندات المستأجر الإضافية (documents) - خاصة بصاحب الحساب والأدمن فقط
@@ -52,33 +72,34 @@ service firebase.storage {
       allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
       allow create, update: if isAuthenticated()
                             && (request.auth.uid == userId || isAdmin())
-                            && isValidSize()
-                            && isAllowedFile();
-      allow delete: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+                            && !isDemoUser()
+                            && isValidDocSize()
+                            && isDocOrImageFile();
+      allow delete: if isAuthenticated() && (request.auth.uid == userId || isAdmin()) && !isDemoUser();
     }
 
-    // 3. صور طلبات الصيانة (tasks) - يرفعها صاحب الطلب أو الأدمن فقط
+    // 3. صور طلبات الصيانة (tasks) - صور حصرية بحد أقصى 5MB لتوفير المساحة والترافيك
     match /tasks/{userId}/{fileName} {
       allow read: if isAuthenticated();
       allow create, update: if isAuthenticated()
                             && (request.auth.uid == userId || isAdmin())
-                            && isValidSize()
-                            && isAllowedFile();
-      allow delete: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+                            && isValidImageSize()
+                            && isImageFile();
+      allow delete: if isAuthenticated() && (request.auth.uid == userId || isAdmin()) && !isDemoUser();
     }
 
-    // 4. صور إثبات إنجاز الصيانة (completions) - يرفعها الفني أو الأدمن فقط
+    // 4. صور إثبات إنجاز الصيانة (completions) - يرفعها الفني أو الأدمن كصور فقط بحد أقصى 5MB
     match /completions/{taskId}/{fileName} {
       allow read: if isAuthenticated();
-      allow create, update: if (isTechnician() || isAdmin()) && isValidSize() && isAllowedFile();
-      allow delete: if isAdmin();
+      allow create, update: if (isTechnician() || isAdmin()) && isValidImageSize() && isImageFile();
+      allow delete: if isAdmin() && !isDemoUser();
     }
 
-    // 5. مرفقات وصور المحادثات (chats) - يمنع حذفها أو استبدالها لغير الأدمن
+    // 5. مرفقات وصور المحادثات (chats) - بحد أقصى 10MB
     match /chats/{chatId}/{fileName} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidSize() && isAllowedFile();
-      allow update, delete: if isAdmin();
+      allow create: if isAuthenticated() && isValidChatSize() && isDocOrImageFile();
+      allow update, delete: if isAdmin() && !isDemoUser();
     }
 
     match /{allPaths=**} {

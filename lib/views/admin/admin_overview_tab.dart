@@ -35,7 +35,7 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
   void initState() {
     super.initState();
     _loadData();
-    _tasksSub = widget.firestoreService.getAllTasksForAdmin().listen((tasksList) {
+    _tasksSub = widget.firestoreService.getAllTasksForAdmin(limit: 15).listen((tasksList) {
       if (mounted) {
         setState(() {
           _recentTasks = tasksList.take(5).toList();
@@ -77,10 +77,10 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
     }
 
     try {
-      final tasksStream = widget.firestoreService.getAllTasksForAdmin();
+      final tasksStream = widget.firestoreService.getAllTasksForAdmin(limit: 15);
       final tasksList = await tasksStream.first;
       recentTasks = tasksList.take(5).toList();
-      activeRequests = tasksList.where((t) => t.status != TaskStatus.completed).length;
+      activeRequests = await widget.firestoreService.getActiveTasksCount();
     } catch (e) {
       debugPrint('Error loading tasks: $e');
     }

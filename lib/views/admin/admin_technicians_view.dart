@@ -18,6 +18,7 @@ class _AdminTechniciansViewState extends State<AdminTechniciansView> {
   
   List<UserModel> _allTenants = [];
   List<UserModel> _filteredTenants = [];
+  String? _defaultTechnicianId;
   bool _isLoading = true;
   String? _error;
 
@@ -41,9 +42,11 @@ class _AdminTechniciansViewState extends State<AdminTechniciansView> {
         _error = null;
       });
       final technicians = await _firestoreService.getTechnicians();
+      final defaultTech = await _firestoreService.getDefaultTechnician();
       setState(() {
         _allTenants = technicians;
         _filteredTenants = technicians;
+        _defaultTechnicianId = defaultTech?.uid;
         _isLoading = false;
       });
     } catch (e) {
@@ -262,19 +265,60 @@ class _AdminTechniciansViewState extends State<AdminTechniciansView> {
       );
     }
 
+    final defaultTech = _allTenants.where((t) => t.uid == _defaultTechnicianId || t.isDefaultTechnician).firstOrNull;
+
     return RefreshIndicator(
       onRefresh: _fetchTechnicians,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        itemCount: _filteredTenants.length,
+        itemCount: _filteredTenants.length + (defaultTech != null ? 1 : 0),
         separatorBuilder: (_, _) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
-          final technician = _filteredTenants[index];
+          if (defaultTech != null && index == 0) {
+            return Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.star_rounded, color: Colors.amber, size: 24),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Default Maintenance Technician',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${defaultTech.name} (${defaultTech.profession ?? 'Maintenance'}) is assigned directly to all incoming tenant requests.',
+                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final techIndex = defaultTech != null ? index - 1 : index;
+          final technician = _filteredTenants[techIndex];
+          final isDefault = technician.uid == _defaultTechnicianId || technician.isDefaultTechnician;
+
           return Card(
             elevation: 2,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: AppColors.border, width: 1),
+              side: BorderSide(
+                color: isDefault ? Colors.amber : AppColors.border, 
+                width: isDefault ? 1.5 : 1,
+              ),
             ),
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -284,7 +328,7 @@ class _AdminTechniciansViewState extends State<AdminTechniciansView> {
                   Row(
                     children: [
                       CircleAvatar(
-                        backgroundColor: AppColors.primaryLight,
+                        backgroundColor: isDefault ? Colors.amber : AppColors.primaryLight,
                         child: Text(
                           technician.name.isNotEmpty ? technician.name[0].toUpperCase() : 'T',
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
@@ -295,9 +339,39 @@ class _AdminTechniciansViewState extends State<AdminTechniciansView> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              technician.name,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    technician.name,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  ),
+                                ),
+                                if (isDefault)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.withValues(alpha: 0.2),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: Colors.amber),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.star_rounded, size: 14, color: Colors.amber),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          'Default',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.amber,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
                             ),
                             const SizedBox(height: 4),
                             Text(
@@ -340,6 +414,47 @@ class _AdminTechniciansViewState extends State<AdminTechniciansView> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        if (!isDefault)
+                          TextButton.icon(
+                            onPressed: () async {
+                              await _firestoreService.setDefaultTechnician(technician.uid);
+                              setState(() {
+                                _defaultTechnicianId = technician.uid;
+                              });
+                              _fetchTechnicians();
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('${technician.name} is now the default technician for new requests.'),
+                                  ),
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.star_outline_rounded, size: 18),
+                            label: const Text('Set as Default'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.amber.shade800,
+                            ),
+                          ),
+                        if (isDefault)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 8),
+                            child: Row(
+                              children: [
+                                Icon(Icons.star_rounded, size: 16, color: Colors.amber),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Default Tech',
+                                  style: TextStyle(
+                                    color: Colors.amber, 
+                                    fontWeight: FontWeight.bold, 
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        const SizedBox(width: 4),
                         TextButton.icon(
                           onPressed: () async {
                             final confirm = await showDialog<bool>(

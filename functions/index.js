@@ -177,9 +177,15 @@ exports.sendPushNotification = functions.firestore
     const notification = snap.data();
     const userId = notification.userId;
     const senderId = notification.senderId;
-    const title = notification.title || "Elite Living";
+    const title = notification.title || "Property Management";
     const message = notification.message || "";
     const relatedTaskId = notification.relatedTaskId || "";
+
+    // 🛡️ Strict Isolation: Never send real FCM push notifications for Demo events
+    if (notification.isDemo === true) {
+      console.log('Skipping push notification for demo event.');
+      return null;
+    }
 
     if (!userId) {
       console.log('No user ID found in notification.');

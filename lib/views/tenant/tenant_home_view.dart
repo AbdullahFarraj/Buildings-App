@@ -202,27 +202,6 @@ class _TenantHomeViewState extends State<TenantHomeView> {
     );
   }
 
-  void _handleTenantReschedule(MaintenanceTaskModel task) {
-    MaintenanceTaskCard.showRescheduleSheet(
-      context: context,
-      task: task,
-      roleLabel: 'tenant',
-      onConfirm: (newDate, newSlot) async {
-        await _firestoreService.rescheduleTask(
-          taskId: task.id,
-          newDate: newDate,
-          newSlot: newSlot,
-          rescheduledByRole: 'tenant',
-        );
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Visit rescheduled successfully / تم تعديل الموعد بنجاح')),
-          );
-        }
-      },
-    );
-  }
-
   Widget _buildRequestsView() {
     return StreamBuilder<List<MaintenanceTaskModel>>(
       stream: _firestoreService.getTasksByTenant(widget.tenantId),
@@ -257,27 +236,7 @@ class _TenantHomeViewState extends State<TenantHomeView> {
             return MaintenanceTaskCard(
               task: task,
               userRole: UserRole.tenant,
-              onRescheduleTap: () => _handleTenantReschedule(task),
               onConfirmTap: () => _showRatingDialog(task),
-              onCancelTap: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Cancel Request'),
-                    content: const Text('Are you sure you want to cancel this maintenance request?'),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text('Yes', style: TextStyle(color: Colors.red)),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirm == true) {
-                  await _firestoreService.deleteTask(task.id);
-                }
-              },
               onCommentsTap: () async {
                 final user = await _firestoreService.getUser(widget.tenantId);
                 if (context.mounted && user != null) {

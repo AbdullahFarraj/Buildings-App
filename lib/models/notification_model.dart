@@ -9,6 +9,7 @@ class NotificationModel {
   final bool isRead;
   final DateTime createdAt;
   final String? relatedTaskId; // For deep linking to a specific task
+  final bool isDemo;
 
   NotificationModel({
     required this.id,
@@ -19,6 +20,7 @@ class NotificationModel {
     this.isRead = false,
     required this.createdAt,
     this.relatedTaskId,
+    this.isDemo = false,
   });
 
   factory NotificationModel.fromMap(Map<String, dynamic> map, String documentId) {
@@ -31,6 +33,7 @@ class NotificationModel {
       isRead: map['isRead'] ?? false,
       createdAt: _parseDate(map['createdAt'] ?? map['timestamp']),
       relatedTaskId: map['relatedTaskId'],
+      isDemo: map['isDemo'] == true,
     );
   }
 
@@ -51,6 +54,7 @@ class NotificationModel {
       'isRead': isRead,
       'createdAt': FieldValue.serverTimestamp(),
       if (relatedTaskId != null) 'relatedTaskId': relatedTaskId,
+      if (isDemo) 'isDemo': true,
     };
   }
 }

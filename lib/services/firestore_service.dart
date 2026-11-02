@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/maintenance_task_model.dart';
 import '../models/task_message_model.dart';
 import '../models/user_model.dart';
@@ -21,7 +22,34 @@ class FirestoreService {
         ? _tasksCollection.doc() 
         : _tasksCollection.doc(task.id);
         
-    await docRef.set(task.toMap());
+    final taskData = task.toMap();
+    if (isCurrentSessionDemo) {
+      taskData['isDemo'] = true;
+    }
+
+    // Auto-assign default technician directly
+    if (taskData['technicianId'] == null) {
+      final defaultTech = await getDefaultTechnician();
+      if (defaultTech != null) {
+        taskData['technicianId'] = defaultTech.uid;
+        taskData['technicianName'] = defaultTech.name;
+        taskData['status'] = TaskStatus.assigned.value;
+      }
+    }
+
+    await docRef.set(taskData);
+
+    // Notify technician if assigned
+    if (taskData['technicianId'] != null) {
+      try {
+        await NotificationService().sendNotification(
+          userId: taskData['technicianId'],
+          title: 'New Maintenance Assignment 🛠️',
+          message: 'A new maintenance task "${task.title}" has been assigned to you.',
+          relatedTaskId: docRef.id,
+        );
+      } catch (_) {}
+    }
 
     // Notify Admins
     try {
@@ -46,10 +74,11 @@ class FirestoreService {
   }
 
   /// Gets a stream of tasks submitted by a specific tenant.
-  Stream<List<MaintenanceTaskModel>> getTasksByTenant(String tenantId) {
+  Stream<List<MaintenanceTaskModel>> getTasksByTenant(String tenantId, {int limit = 50}) {
     return _tasksCollection
         .where('tenantId', isEqualTo: tenantId)
         .orderBy('createdAt', descending: true)
+        .limit(limit)
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) {
@@ -60,9 +89,10 @@ class FirestoreService {
   }
 
   /// Gets a stream of tasks assigned to a specific technician.
-  Stream<List<MaintenanceTaskModel>> getAssignedTasksForTechnician(String technicianId) {
+  Stream<List<MaintenanceTaskModel>> getAssignedTasksForTechnician(String technicianId, {int limit = 50}) {
     return _tasksCollection
         .where('technicianId', isEqualTo: technicianId)
+        .limit(limit)
         .snapshots()
         .map((snapshot) {
       final tasks = snapshot.docs.map((doc) {
@@ -77,12 +107,28 @@ class FirestoreService {
   }
 
   /// Gets a stream of all tasks for the admin dashboard.
-  Stream<List<MaintenanceTaskModel>> getAllTasksForAdmin() {
+  Stream<List<MaintenanceTaskModel>> getAllTasksForAdmin({int limit = 50}) {
+    if (isCurrentSessionDemo) {
+      return _tasksCollection
+          .where('isDemo', isEqualTo: true)
+          .snapshots()
+          .map((snapshot) {
+        final list = snapshot.docs.map((doc) {
+          return MaintenanceTaskModel.fromMap(
+              doc.data() as Map<String, dynamic>, doc.id);
+        }).toList();
+        list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        return list;
+      });
+    }
     return _tasksCollection
         .orderBy('createdAt', descending: true)
+        .limit(limit)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) {
+      return snapshot.docs
+          .where((doc) => (doc.data() as Map<String, dynamic>)['isDemo'] != true)
+          .map((doc) {
         return MaintenanceTaskModel.fromMap(
             doc.data() as Map<String, dynamic>, doc.id);
       }).toList();
@@ -361,32 +407,122 @@ class FirestoreService {
 
   /// Gets a list of all technicians
   Future<List<UserModel>> getTechnicians() async {
+    if (isCurrentSessionDemo) {
+      final snapshot = await _firestore
+          .collection('users')
+          .where('isDemo', isEqualTo: true)
+          .where('role', isEqualTo: UserRole.technician.value)
+          .get();
+      return snapshot.docs.map((doc) => UserModel.fromMap(doc.data(), doc.id)).toList();
+    }
     final snapshot = await _firestore
         .collection('users')
         .where('role', isEqualTo: UserRole.technician.value)
         .get();
     
-    return snapshot.docs.map((doc) {
-      return UserModel.fromMap(doc.data(), doc.id);
-    }).toList();
+    return snapshot.docs
+        .where((doc) => (doc.data() as Map<String, dynamic>)['isDemo'] != true)
+        .map((doc) => UserModel.fromMap(doc.data(), doc.id))
+        .toList();
+  }
+
+  /// Gets the default technician for auto-assigning tasks.
+  Future<UserModel?> getDefaultTechnician() async {
+    try {
+      final technicians = await getTechnicians();
+      if (technicians.isEmpty) return null;
+
+      // 1. Check if any technician has isDefaultTechnician: true
+      final marked = technicians.where((t) => t.isDefaultTechnician).toList();
+      if (marked.isNotEmpty) return marked.first;
+
+      // 2. Check app_settings document
+      final settingsDoc = await _firestore.collection('app_settings').doc('maintenance').get();
+      if (settingsDoc.exists && settingsDoc.data() != null) {
+        final defaultId = settingsDoc.data()!['defaultTechnicianId'];
+        if (defaultId != null && defaultId is String && defaultId.isNotEmpty) {
+          final matched = technicians.where((t) => t.uid == defaultId).toList();
+          if (matched.isNotEmpty) return matched.first;
+        }
+      }
+
+      // 3. Fallback: return the first technician
+      return technicians.first;
+    } catch (e) {
+      debugPrint('Error getting default technician: $e');
+      return null;
+    }
+  }
+
+  /// Sets the default technician in Firestore.
+  Future<void> setDefaultTechnician(String technicianId) async {
+    // 1. Update app_settings/maintenance
+    await _firestore.collection('app_settings').doc('maintenance').set({
+      'defaultTechnicianId': technicianId,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    // 2. Update isDefaultTechnician on technician user documents
+    try {
+      final technicians = await getTechnicians();
+      final batch = _firestore.batch();
+      for (var tech in technicians) {
+        final ref = _firestore.collection('users').doc(tech.uid);
+        batch.update(ref, {'isDefaultTechnician': tech.uid == technicianId});
+      }
+      await batch.commit();
+    } catch (e) {
+      debugPrint('Error updating technician isDefaultTechnician flag: $e');
+    }
   }
 
   /// Gets a list of all tenants
   Future<List<UserModel>> getTenants() async {
+    if (isCurrentSessionDemo) {
+      final snapshot = await _firestore
+          .collection('users')
+          .where('isDemo', isEqualTo: true)
+          .where('role', isEqualTo: UserRole.tenant.value)
+          .get();
+      return snapshot.docs.map((doc) => UserModel.fromMap(doc.data(), doc.id)).toList();
+    }
     final snapshot = await _firestore
         .collection('users')
         .where('role', isEqualTo: UserRole.tenant.value)
         .get();
     
-    return snapshot.docs.map((doc) {
-      return UserModel.fromMap(doc.data(), doc.id);
-    }).toList();
+    return snapshot.docs
+        .where((doc) => (doc.data() as Map<String, dynamic>)['isDemo'] != true)
+        .map((doc) => UserModel.fromMap(doc.data(), doc.id))
+        .toList();
   }
 
   /// Gets a list of all contracts
   Future<List<ContractModel>> getContracts() async {
+    if (isCurrentSessionDemo) {
+      final snapshot = await _firestore
+          .collection('contracts')
+          .where('isDemo', isEqualTo: true)
+          .get();
+      final list = snapshot.docs.map((doc) => ContractModel.fromFirestore(doc)).toList();
+      list.sort((a, b) {
+        if (a.isActive && !b.isActive) return -1;
+        if (!a.isActive && b.isActive) return 1;
+        if (a.endDate == null) return 1;
+        if (b.endDate == null) return -1;
+        if (a.isActive) {
+          return a.endDate!.compareTo(b.endDate!);
+        } else {
+          return b.endDate!.compareTo(a.endDate!);
+        }
+      });
+      return list;
+    }
     final snapshot = await _firestore.collection('contracts').get();
-    final list = snapshot.docs.map((doc) => ContractModel.fromFirestore(doc)).toList();
+    final list = snapshot.docs
+        .where((doc) => (doc.data() as Map<String, dynamic>)['isDemo'] != true)
+        .map((doc) => ContractModel.fromFirestore(doc))
+        .toList();
     list.sort((a, b) {
       if (a.endDate == null) return 1;
       if (b.endDate == null) return -1;
@@ -395,9 +531,38 @@ class FirestoreService {
     return list;
   }
 
+  /// Gets active maintenance tasks count using fast & cheap aggregation (1 read total)
+  Future<int> getActiveTasksCount() async {
+    try {
+      if (isCurrentSessionDemo) {
+        final aggregate = await _tasksCollection
+            .where('isDemo', isEqualTo: true)
+            .where('status', isNotEqualTo: TaskStatus.completed.value)
+            .count()
+            .get();
+        return aggregate.count ?? 0;
+      }
+      final aggregate = await _tasksCollection
+          .where('status', isNotEqualTo: TaskStatus.completed.value)
+          .count()
+          .get();
+      return aggregate.count ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   /// Gets total contracts count
   Future<int> getContractsCount() async {
     try {
+      if (isCurrentSessionDemo) {
+        final aggregate = await _firestore
+            .collection('contracts')
+            .where('isDemo', isEqualTo: true)
+            .count()
+            .get();
+        return aggregate.count ?? 0;
+      }
       final aggregate = await _firestore.collection('contracts').count().get();
       return aggregate.count ?? 0;
     } catch (_) {
@@ -415,9 +580,15 @@ class FirestoreService {
     return null;
   }
 
+  /// Checks if the current authenticated user is a Demo session
+  bool get isCurrentSessionDemo {
+    final email = FirebaseAuth.instance.currentUser?.email?.toLowerCase();
+    return email != null && email.startsWith('demo.');
+  }
+
   /// Deletes a task
   Future<void> deleteTask(String taskId) async {
-    await _tasksCollection.doc(taskId).delete();
+    throw Exception('Deleting maintenance tasks has been disabled.');
   }
 
   /// Creates a new user document
@@ -431,17 +602,21 @@ class FirestoreService {
 
   /// Deletes a user document
   Future<void> deleteUser(String uid) async {
+    if (isCurrentSessionDemo) {
+      throw Exception('Demo Mode Restriction: Deleting accounts is disabled in preview mode.');
+    }
     await _firestore.collection('users').doc(uid).delete();
   }
 
   // --- Task Chat / Comments ---
 
   /// Get stream of messages for a specific task
-  Stream<List<TaskMessageModel>> getTaskMessages(String taskId) {
+  Stream<List<TaskMessageModel>> getTaskMessages(String taskId, {int limit = 50}) {
     return _tasksCollection
         .doc(taskId)
         .collection('messages')
         .orderBy('createdAt', descending: true)
+        .limit(limit)
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) {
@@ -516,11 +691,12 @@ class FirestoreService {
   // --- Direct Chat ---
 
   /// Get stream of messages for a direct chat
-  Stream<List<TaskMessageModel>> getDirectChatMessages(String chatId) {
+  Stream<List<TaskMessageModel>> getDirectChatMessages(String chatId, {int limit = 50}) {
     return _firestore.collection('direct_chats')
         .doc(chatId)
         .collection('messages')
         .orderBy('createdAt', descending: true)
+        .limit(limit)
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) {
@@ -621,8 +797,19 @@ class FirestoreService {
 
   /// Future list of all cheques (for Admin)
   Future<List<ChequeModel>> getAllCheques() async {
+    if (isCurrentSessionDemo) {
+      final snapshot = await _chequesCollection
+          .where('isDemo', isEqualTo: true)
+          .get();
+      final list = snapshot.docs.map((doc) => ChequeModel.fromFirestore(doc)).toList();
+      list.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+      return list;
+    }
     final snapshot = await _chequesCollection.get();
-    final list = snapshot.docs.map((doc) => ChequeModel.fromFirestore(doc)).toList();
+    final list = snapshot.docs
+        .where((doc) => (doc.data() as Map<String, dynamic>)['isDemo'] != true)
+        .map((doc) => ChequeModel.fromFirestore(doc))
+        .toList();
     list.sort((a, b) => a.dueDate.compareTo(b.dueDate));
     return list;
   }
@@ -657,11 +844,21 @@ class FirestoreService {
 
   /// Get all contracts belonging to a specific tenant
   Future<List<ContractModel>> getContractsByTenant(String tenantUid) async {
+    if (isCurrentSessionDemo) {
+      final snapshot = await _firestore
+          .collection('contracts')
+          .where('isDemo', isEqualTo: true)
+          .get();
+      return snapshot.docs.map((doc) => ContractModel.fromFirestore(doc)).toList();
+    }
     final snapshot = await _firestore
         .collection('contracts')
         .where('tenantUid', isEqualTo: tenantUid)
         .get();
-    final list = snapshot.docs.map((doc) => ContractModel.fromFirestore(doc)).toList();
+    final list = snapshot.docs
+        .where((doc) => (doc.data() as Map<String, dynamic>)['isDemo'] != true)
+        .map((doc) => ContractModel.fromFirestore(doc))
+        .toList();
     list.sort((a, b) {
       if (a.endDate == null) return 1;
       if (b.endDate == null) return -1;

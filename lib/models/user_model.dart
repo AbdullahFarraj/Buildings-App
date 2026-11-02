@@ -20,6 +20,7 @@ class UserModel {
   final double? ledgerBalance;
   final double? totalDebit;
   final double? totalCredit;
+  final bool isDefaultTechnician;
 
   UserModel({
     required this.uid,
@@ -41,6 +42,7 @@ class UserModel {
     this.ledgerBalance,
     this.totalDebit,
     this.totalCredit,
+    this.isDefaultTechnician = false,
   });
 
   /// Returns all properties rented by this tenant, falling back to legacy single building/apt fields
@@ -104,6 +106,7 @@ class UserModel {
       ledgerBalance: (map['ledgerBalance'] as num?)?.toDouble(),
       totalDebit: (map['totalDebit'] as num?)?.toDouble(),
       totalCredit: (map['totalCredit'] as num?)?.toDouble(),
+      isDefaultTechnician: map['isDefaultTechnician'] == true,
     );
   }
 
@@ -128,6 +131,7 @@ class UserModel {
       if (ledgerBalance != null) 'ledgerBalance': ledgerBalance,
       if (totalDebit != null) 'totalDebit': totalDebit,
       if (totalCredit != null) 'totalCredit': totalCredit,
+      'isDefaultTechnician': isDefaultTechnician,
     };
   }
 
@@ -151,6 +155,7 @@ class UserModel {
     double? ledgerBalance,
     double? totalDebit,
     double? totalCredit,
+    bool? isDefaultTechnician,
   }) {
     return UserModel(
       uid: uid ?? this.uid,
@@ -172,6 +177,7 @@ class UserModel {
       ledgerBalance: ledgerBalance ?? this.ledgerBalance,
       totalDebit: totalDebit ?? this.totalDebit,
       totalCredit: totalCredit ?? this.totalCredit,
+      isDefaultTechnician: isDefaultTechnician ?? this.isDefaultTechnician,
     );
   }
 }

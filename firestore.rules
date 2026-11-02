@@ -36,6 +36,13 @@ service cloud.firestore {
       return isAuthenticated() && getUserData().get('role', '') == 'technician';
     }
 
+    function isDemoUser() {
+      return isAuthenticated() && (
+        (request.auth.token.email != null && request.auth.token.email.matches('^demo\\..*')) ||
+        request.auth.token.get('isDemo', false) == true
+      );
+    }
+
     function changedKeys() {
       return request.resource.data.diff(resource.data).affectedKeys();
     }
@@ -104,8 +111,8 @@ service cloud.firestore {
       // الإنشاء: صلاحية الإدارة فقط
       allow create: if isAdmin();
 
-      // الحذف: الإدارة أو صاحب الحساب نفسه (لتمكين ميزة حذف الحساب الذاتي المستوجبة في App Store)
-      allow delete: if isAdmin() || isOwner(userId);
+      // الحذف: الإدارة أو صاحب الحساب نفسه (يمنع الحذف نهائياً لحسابات الديمو لحماية النظام)
+      allow delete: if (isAdmin() || isOwner(userId)) && !isDemoUser();
 
       // التعديل:
       // - الأدمن يعدل أي حساب
@@ -153,13 +160,12 @@ service cloud.firestore {
                   || (isAuthenticated() && resource.data.get('technicianId', '') == request.auth.uid);
 
       // الإنشاء:
-      // - المستأجر ينشئ طلباً باسمه هو فقط وبحالة pending ولا يستطيع إسناده لفني بنفسه
+      // - المستأجر ينشئ طلباً باسمه إما بحالة pending أو مع فني افتراضي مسند بحالة assigned
       // - أو الأدمن
       allow create: if isAdmin()
                     || (isRegistered()
                         && request.resource.data.tenantId == request.auth.uid
-                        && request.resource.data.get('technicianId', null) == null
-                        && request.resource.data.get('status', 'pending') == 'pending'
+                        && request.resource.data.get('status', 'pending') in ['pending', 'assigned']
                         && request.resource.data.title is string
                         && request.resource.data.title.size() <= 300
                         && request.resource.data.description is string
@@ -167,13 +173,13 @@ service cloud.firestore {
 
       // التعديل:
       // - الأدمن يعدل كل شيء
-      // - الفني يحدث حالة الطلب (إلى inProgress أو waitingConfirmation فقط) وإثبات الإنجاز وملاحظاته
+      // - الفني يحدث حالة الطلب (إلى inProgress أو onHold أو waitingConfirmation) وإثبات الإنجاز وملاحظاته وسبب التعليق
       // - المستأجر يؤكد الإنجاز (إلى completed فقط) ويضيف التقييم (1-5) والتعليق
       allow update: if isAdmin()
                     || (isAuthenticated()
                         && resource.data.get('technicianId', '') == request.auth.uid
-                        && changedKeys().hasOnly(['status', 'completedAt', 'completionProofUrl', 'completionNotes'])
-                        && request.resource.data.status in ['inProgress', 'waitingConfirmation'])
+                        && changedKeys().hasOnly(['status', 'completedAt', 'completionProofUrl', 'completionNotes', 'holdReason'])
+                        && request.resource.data.status in ['inProgress', 'waitingConfirmation', 'onHold'])
                     || (isAuthenticated()
                         && resource.data.tenantId == request.auth.uid
                         && changedKeys().hasOnly(['status', 'completedAt', 'rating', 'tenantFeedback'])
@@ -183,11 +189,8 @@ service cloud.firestore {
                                 && request.resource.data.rating >= 1
                                 && request.resource.data.rating <= 5)));
 
-      // الحذف والإلغاء:
-      // - الأدمن يحذف أي طلب
-      // - المستأجر يستطيع حذف / إلغاء طلب الصيانة الخاص به
-      allow delete: if isAdmin()
-                    || (isAuthenticated() && resource.data.tenantId == request.auth.uid);
+      // الحذف والإلغاء: ممنوع بالكامل للجميع
+      allow delete: if false;
 
       // محادثات ورسائل طلب الصيانة (task messages)
       // - القراءة: الأدمن وأطراف الطلب فقط
@@ -261,8 +264,8 @@ service cloud.firestore {
       allow read: if isAdmin()
                   || (isAuthenticated() && resource.data.tenantUid == request.auth.uid);
 
-      // التعديل والإنشاء والحذف: للإدارة فقط
-      allow write: if isAdmin();
+      // التعديل والإنشاء والحذف: للإدارة الفعلية فقط (ممنوع على الديمو)
+      allow write: if isAdmin() && !isDemoUser();
     }
 
     // ==========================================
@@ -273,7 +276,17 @@ service cloud.firestore {
       allow read: if isAdmin()
                   || (isAuthenticated() && resource.data.tenantUid == request.auth.uid);
 
-      // الإنشاء والتعديل والحذف: للإدارة فقط
+      // الإنشاء والتعديل والحذف: للإدارة الفعلية فقط (ممنوع على الديمو)
+      allow write: if isAdmin() && !isDemoUser();
+    }
+
+    // ==========================================
+    // 7. جدول إعدادات التطبيق (app_settings)
+    // ==========================================
+    match /app_settings/{settingId} {
+      // القراءة: لجميع المستخدمين المسجلين (لقراءة الفني الافتراضي)
+      allow read: if isAuthenticated();
+      // الكتابة: للإدارة فقط
       allow write: if isAdmin();
     }
   }

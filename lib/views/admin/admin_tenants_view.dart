@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
@@ -19,6 +20,7 @@ class AdminTenantsView extends StatefulWidget {
 class _AdminTenantsViewState extends State<AdminTenantsView> {
   final FirestoreService _firestoreService = FirestoreService();
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _buildingScrollController = ScrollController();
   
   List<UserModel> _allTenants = [];
   List<UserModel> _filteredTenants = [];
@@ -38,6 +40,7 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
   @override
   void dispose() {
     _searchController.dispose();
+    _buildingScrollController.dispose();
     super.dispose();
   }
 
@@ -118,37 +121,53 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
             ),
           ),
         ),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: Row(
-            children: _buildings.map((building) {
-              final isSelected = building == _selectedBuilding;
-              return Padding(
-                padding: const EdgeInsets.only(right: 8.0),
-                child: FilterChip(
-                  label: Text(building),
-                  selected: isSelected,
-                  onSelected: (selected) {
-                    setState(() {
-                      _selectedBuilding = building;
-                    });
-                    _applyFilters();
-                  },
-                  selectedColor: AppColors.primaryLight,
-                  labelStyle: TextStyle(
-                    color: isSelected ? Colors.white : AppColors.textPrimary,
-                  ),
-                  backgroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: BorderSide(
-                      color: isSelected ? AppColors.primary : AppColors.border,
+        Listener(
+          onPointerSignal: (pointerSignal) {
+            if (pointerSignal is PointerScrollEvent && _buildingScrollController.hasClients) {
+              final offset = pointerSignal.scrollDelta.dy != 0
+                  ? pointerSignal.scrollDelta.dy
+                  : pointerSignal.scrollDelta.dx;
+              final target = (_buildingScrollController.offset + offset).clamp(
+                0.0,
+                _buildingScrollController.position.maxScrollExtent,
+              );
+              _buildingScrollController.jumpTo(target);
+            }
+          },
+          child: SingleChildScrollView(
+            controller: _buildingScrollController,
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Row(
+              children: _buildings.map((building) {
+                final isSelected = building == _selectedBuilding;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: FilterChip(
+                    label: Text(building),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      setState(() {
+                        _selectedBuilding = building;
+                      });
+                      _applyFilters();
+                    },
+                    selectedColor: AppColors.primaryLight,
+                    labelStyle: TextStyle(
+                      color: isSelected ? Colors.white : AppColors.textPrimary,
+                    ),
+                    backgroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: BorderSide(
+                        color: isSelected ? AppColors.primary : AppColors.border,
+                      ),
                     ),
                   ),
-                ),
-              );
-            }).toList(),
+                );
+              }).toList(),
+            ),
           ),
         ),
         const SizedBox(height: 8),
@@ -254,7 +273,7 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
                                           const Icon(Icons.apartment, size: 14, color: AppColors.primary),
                                           const SizedBox(width: 4),
                                           Text(
-                                            '${tenant.allProperties.length} عقارات',
+                                            '${tenant.allProperties.length} Units',
                                             style: const TextStyle(
                                               color: AppColors.primary,
                                               fontWeight: FontWeight.bold,

@@ -39,7 +39,7 @@ class TaskPhotosWidget extends StatelessWidget {
                     const Icon(Icons.compare, size: 16, color: AppColors.primary),
                     const SizedBox(width: 6),
                     const Text(
-                      'Repair Comparison / مقارنة التصليح',
+                      'Repair Comparison',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
@@ -64,7 +64,7 @@ class TaskPhotosWidget extends StatelessWidget {
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: const Text(
-                              'Before / الخلل',
+                              'Before (Reported Issue)',
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
@@ -92,6 +92,7 @@ class TaskPhotosWidget extends StatelessWidget {
                                     task.photoUrls!.first,
                                     height: 90,
                                     width: double.infinity,
+                                    cacheWidth: 400,
                                     fit: BoxFit.cover,
                                     errorBuilder: (_, _, _) => _errorPlaceholder(),
                                   ),
@@ -137,7 +138,7 @@ class TaskPhotosWidget extends StatelessWidget {
                                 Icon(Icons.check_circle, size: 12, color: AppColors.statusCompletedText),
                                 SizedBox(width: 4),
                                 Text(
-                                  'After / بعد الإصلاح',
+                                  'After (Fixed)',
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.bold,
@@ -170,6 +171,7 @@ class TaskPhotosWidget extends StatelessWidget {
                                   task.completionProofUrl!,
                                   height: 87,
                                   width: double.infinity,
+                                  cacheWidth: 400,
                                   fit: BoxFit.cover,
                                   errorBuilder: (_, _, _) => _errorPlaceholder(),
                                 ),
@@ -202,7 +204,7 @@ class TaskPhotosWidget extends StatelessWidget {
                     Icon(Icons.check_circle, size: 12, color: AppColors.statusCompletedText),
                     SizedBox(width: 4),
                     Text(
-                      'Repair Proof / إثبات الإصلاح',
+                      'Repair Proof',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
@@ -230,6 +232,7 @@ class TaskPhotosWidget extends StatelessWidget {
                     task.completionProofUrl!,
                     height: 80,
                     width: 120,
+                    cacheWidth: 350,
                     fit: BoxFit.cover,
                     errorBuilder: (_, _, _) => _errorPlaceholder(),
                   ),
@@ -264,6 +267,7 @@ class TaskPhotosWidget extends StatelessWidget {
                       task.photoUrls![index],
                       width: 65,
                       height: 65,
+                      cacheWidth: 250,
                       fit: BoxFit.cover,
                       errorBuilder: (_, _, _) => _errorPlaceholder(),
                     ),

@@ -26,13 +26,13 @@ class StorageService {
     );
   }
 
-  /// Uploads multiple initial task issue photos and returns the download URLs.
-  Future<List<String>> uploadTaskPhotos(List<XFile> imageFiles, String tenantId) async {
-    List<String> urls = [];
-    for (var file in imageFiles) {
+  /// Helper to upload a single file with automatic retry (up to 2 attempts) for network resilience.
+  Future<String> _uploadWithRetry(Reference ref, XFile file) async {
+    int attempts = 0;
+    const int maxAttempts = 2;
+    while (attempts < maxAttempts) {
       try {
-        final String fileName = _uuid.v4();
-        final Reference ref = _storage.ref().child('tasks/$tenantId/$fileName.jpg');
+        attempts++;
         UploadTask uploadTask;
         if (!kIsWeb && file.path.isNotEmpty) {
           uploadTask = ref.putFile(
@@ -47,36 +47,49 @@ class StorageService {
           );
         }
         final TaskSnapshot snapshot = await uploadTask;
-        final url = await snapshot.ref.getDownloadURL();
-        urls.add(url);
+        return await snapshot.ref.getDownloadURL();
       } catch (e) {
-        debugPrint('Error uploading task photo: $e');
+        if (attempts >= maxAttempts) {
+          rethrow;
+        }
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+    }
+    throw Exception('Failed to upload file after $maxAttempts attempts.');
+  }
+
+  /// Uploads multiple initial task issue photos with retry and atomic rollback on failure.
+  Future<List<String>> uploadTaskPhotos(List<XFile> imageFiles, String tenantId) async {
+    List<String> urls = [];
+    List<Reference> uploadedRefs = [];
+
+    for (var file in imageFiles) {
+      final String fileName = _uuid.v4();
+      final Reference ref = _storage.ref().child('tasks/$tenantId/$fileName.jpg');
+      try {
+        final url = await _uploadWithRetry(ref, file);
+        urls.add(url);
+        uploadedRefs.add(ref);
+      } catch (e) {
+        debugPrint('Error uploading task photo, rolling back partial uploads: $e');
+        // Rollback: delete already uploaded files in this batch to prevent orphaned files
+        for (var uploadedRef in uploadedRefs) {
+          try {
+            await uploadedRef.delete();
+          } catch (_) {}
+        }
         rethrow;
       }
     }
     return urls;
   }
 
-  /// Uploads the completion proof photo and returns the download URL.
+  /// Uploads the completion proof photo with retry and returns the download URL.
   Future<String?> uploadCompletionProof(XFile imageFile, String taskId) async {
     try {
       final String fileName = 'proof_${_uuid.v4()}';
       final Reference ref = _storage.ref().child('completions/$taskId/$fileName.jpg');
-      UploadTask uploadTask;
-      if (!kIsWeb && imageFile.path.isNotEmpty) {
-        uploadTask = ref.putFile(
-          File(imageFile.path),
-          SettableMetadata(contentType: 'image/jpeg'),
-        );
-      } else {
-        final Uint8List bytes = await imageFile.readAsBytes();
-        uploadTask = ref.putData(
-          bytes,
-          SettableMetadata(contentType: 'image/jpeg'),
-        );
-      }
-      final TaskSnapshot snapshot = await uploadTask;
-      return await snapshot.ref.getDownloadURL();
+      return await _uploadWithRetry(ref, imageFile);
     } catch (e) {
       debugPrint('Error uploading completion proof: $e');
       rethrow;

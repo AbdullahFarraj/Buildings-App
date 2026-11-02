@@ -48,7 +48,11 @@ class _AdminAllChequesViewState extends State<AdminAllChequesView> {
         _error = null;
       });
 
-      final cheques = await _firestoreService.getAllCheques();
+      final allCheques = await _firestoreService.getAllCheques();
+      final currentYear = DateTime.now().year;
+
+      // Filter strictly to current year and future (exclude previous years)
+      final cheques = allCheques.where((c) => c.dueDate.year >= currentYear).toList();
 
       final dynamicBuildings = cheques
           .map((c) => c.buildingName ?? '')
@@ -128,7 +132,7 @@ class _AdminAllChequesViewState extends State<AdminAllChequesView> {
       appBar: AppBar(
         title: Row(
           children: [
-            const Text('شيكات الإيجار والدفعات / Cheques', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+            const Text('Rent Cheques & Payments', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
             const SizedBox(width: 8),
             if (!_isLoading)
               Container(
@@ -147,7 +151,7 @@ class _AdminAllChequesViewState extends State<AdminAllChequesView> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'تحديث',
+            tooltip: 'Refresh',
             onPressed: _fetchCheques,
           ),
         ],
@@ -163,7 +167,7 @@ class _AdminAllChequesViewState extends State<AdminAllChequesView> {
                 TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
-                    hintText: 'بحث باسم المستأجر، رقم الشيك، البنك، الشقة...',
+                    hintText: 'Search by tenant, cheque #, bank, unit...',
                     prefixIcon: const Icon(Icons.search, size: 20),
                     suffixIcon: _searchController.text.isNotEmpty
                         ? IconButton(
@@ -213,12 +217,12 @@ class _AdminAllChequesViewState extends State<AdminAllChequesView> {
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
-                      _buildStatusChip('الكل ($totalCount)', 'all'),
-                      _buildStatusChip('قيد الانتظار', 'pending'),
-                      _buildStatusChip('مستحق قريباً', 'due_soon'),
-                      _buildStatusChip('مدفوع', 'paid'),
-                      _buildStatusChip('متأخر ($overdueCount)', 'overdue', isAlert: overdueCount > 0),
-                      _buildStatusChip('مرتجع', 'bounced'),
+                      _buildStatusChip('All ($totalCount)', 'all'),
+                      _buildStatusChip('Pending', 'pending'),
+                      _buildStatusChip('Due Soon', 'due_soon'),
+                      _buildStatusChip('Paid', 'paid'),
+                      _buildStatusChip('Overdue ($overdueCount)', 'overdue', isAlert: overdueCount > 0),
+                      _buildStatusChip('Bounced', 'bounced'),
                     ],
                   ),
                 ),
@@ -233,15 +237,15 @@ class _AdminAllChequesViewState extends State<AdminAllChequesView> {
             child: Row(
               children: [
                 Expanded(
-                  child: _buildMiniStat('إجمالي المبلغ', '${_currencyFormat.format(totalAmount)} د.إ', AppColors.primary),
+                  child: _buildMiniStat('Total Amount', '${_currencyFormat.format(totalAmount)} AED', AppColors.primary),
                 ),
                 Container(width: 1, height: 28, color: Colors.grey.shade300),
                 Expanded(
-                  child: _buildMiniStat('المدفوع', '${_currencyFormat.format(paidAmount)} د.إ', Colors.green.shade700),
+                  child: _buildMiniStat('Paid', '${_currencyFormat.format(paidAmount)} AED', Colors.green.shade700),
                 ),
                 Container(width: 1, height: 28, color: Colors.grey.shade300),
                 Expanded(
-                  child: _buildMiniStat('المتبقي', '${_currencyFormat.format(pendingAmount)} د.إ', overdueCount > 0 ? Colors.red.shade700 : Colors.orange.shade800),
+                  child: _buildMiniStat('Remaining', '${_currencyFormat.format(pendingAmount)} AED', overdueCount > 0 ? Colors.red.shade700 : Colors.orange.shade800),
                 ),
               ],
             ),
@@ -305,9 +309,9 @@ class _AdminAllChequesViewState extends State<AdminAllChequesView> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('خطأ: $_error', style: const TextStyle(color: Colors.red)),
+            Text('Error: $_error', style: const TextStyle(color: Colors.red)),
             const SizedBox(height: 12),
-            ElevatedButton(onPressed: _fetchCheques, child: const Text('إعادة المحاولة')),
+            ElevatedButton(onPressed: _fetchCheques, child: const Text('Retry')),
           ],
         ),
       );
@@ -320,7 +324,7 @@ class _AdminAllChequesViewState extends State<AdminAllChequesView> {
           children: const [
             Icon(Icons.payment_outlined, size: 50, color: Colors.grey),
             SizedBox(height: 12),
-            Text('لا توجد شيكات تطابق معايير البحث', style: TextStyle(color: Colors.grey, fontSize: 15)),
+            Text('No cheques match the search criteria', style: TextStyle(color: Colors.grey, fontSize: 15)),
           ],
         ),
       );
@@ -339,19 +343,19 @@ class _AdminAllChequesViewState extends State<AdminAllChequesView> {
           String badgeText;
           if (cheque.isPaid) {
             badgeColor = Colors.green;
-            badgeText = 'تم الصرف ✅';
+            badgeText = 'Paid ✅';
           } else if (cheque.isBounced) {
             badgeColor = Colors.red;
-            badgeText = 'مرتجع ❌';
+            badgeText = 'Bounced ❌';
           } else if (cheque.isOverdue) {
             badgeColor = Colors.red.shade900;
-            badgeText = 'متأخر (${-cheque.daysUntilDue} يوم)';
+            badgeText = 'Overdue (${-cheque.daysUntilDue} d)';
           } else if (cheque.isDueSoon) {
             badgeColor = Colors.amber.shade900;
-            badgeText = 'مستحق قريباً (${cheque.daysUntilDue} يوم)';
+            badgeText = 'Due Soon (${cheque.daysUntilDue} d)';
           } else {
             badgeColor = Colors.blueGrey;
-            badgeText = 'قيد الانتظار';
+            badgeText = 'Pending';
           }
 
           return Card(
@@ -397,13 +401,13 @@ class _AdminAllChequesViewState extends State<AdminAllChequesView> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                cheque.tenantName.isNotEmpty ? cheque.tenantName : 'مستأجر',
+                                cheque.tenantName.isNotEmpty ? cheque.tenantName : 'Tenant',
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                               Text(
-                                '${cheque.bankName} - شيك #${cheque.chequeNumber}',
+                                '${cheque.bankName} - Cheque #${cheque.chequeNumber}',
                                 style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
                               ),
                             ],
@@ -430,9 +434,9 @@ class _AdminAllChequesViewState extends State<AdminAllChequesView> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('المبلغ', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                            const Text('Amount', style: TextStyle(fontSize: 10, color: Colors.grey)),
                             Text(
-                              '${_currencyFormat.format(cheque.amount)} د.إ',
+                              '${_currencyFormat.format(cheque.amount)} AED',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
@@ -444,7 +448,7 @@ class _AdminAllChequesViewState extends State<AdminAllChequesView> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            const Text('تاريخ ووقت الاستحقاق للدفع', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                            const Text('Due Date', style: TextStyle(fontSize: 10, color: Colors.grey)),
                             Row(
                               children: [
                                 const Icon(Icons.event, size: 14, color: AppColors.accent),
@@ -462,7 +466,7 @@ class _AdminAllChequesViewState extends State<AdminAllChequesView> {
                     if (cheque.buildingName != null || cheque.unitNumber != null) ...[
                       const SizedBox(height: 8),
                       Text(
-                        '🏢 ${cheque.buildingName ?? ""} - شقة ${cheque.unitNumber ?? ""}',
+                        '🏢 ${cheque.buildingName ?? ""} - Unit ${cheque.unitNumber ?? ""}',
                         style: const TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                     ],
@@ -478,7 +482,7 @@ class _AdminAllChequesViewState extends State<AdminAllChequesView> {
                           ),
                           onPressed: () => _toggleChequePaid(cheque),
                           icon: Icon(cheque.isPaid ? Icons.undo : Icons.check_circle, size: 14),
-                          label: Text(cheque.isPaid ? 'إعادة كغير مدفوع' : 'صرف الشيك', style: const TextStyle(fontSize: 12)),
+                          label: Text(cheque.isPaid ? 'Mark as Unpaid' : 'Clear Cheque', style: const TextStyle(fontSize: 12)),
                         ),
                         const SizedBox(width: 8),
                         TextButton.icon(
@@ -496,7 +500,7 @@ class _AdminAllChequesViewState extends State<AdminAllChequesView> {
                             }
                           },
                           icon: const Icon(Icons.person, size: 14),
-                          label: const Text('المستأجر', style: TextStyle(fontSize: 12)),
+                          label: const Text('Tenant', style: TextStyle(fontSize: 12)),
                         ),
                       ],
                     ),
