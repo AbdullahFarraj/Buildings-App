@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
+import 'core/config/app_environment.dart';
 import 'core/theme/app_theme.dart';
 import 'services/push_notification_service.dart';
 import 'views/splash/splash_view.dart';
@@ -14,6 +15,7 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    debugPrint('🚀 Active Firebase Environment: ${AppEnvironment.name} [Project: ${DefaultFirebaseOptions.currentPlatform.projectId}]');
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
     await PushNotificationService.initialize();
   } catch (e) {
