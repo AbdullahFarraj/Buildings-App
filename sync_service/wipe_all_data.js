@@ -1,7 +1,24 @@
 const admin = require('firebase-admin');
 const path = require('path');
+const fs = require('fs');
 
-const serviceAccount = require(path.resolve(__dirname, 'serviceAccountKey.json'));
+// Check target environment
+const isDev = process.argv.includes('--env=dev') || process.argv.includes('--dev');
+let serviceAccountPath;
+
+if (isDev) {
+  serviceAccountPath = path.resolve(__dirname, 'serviceAccountKey.dev.json');
+  if (!fs.existsSync(serviceAccountPath)) {
+    serviceAccountPath = path.resolve(__dirname, 'serviceAccountKey.json');
+  }
+} else {
+  serviceAccountPath = path.resolve(__dirname, 'serviceAccountKey.prod.json');
+  if (!fs.existsSync(serviceAccountPath)) {
+    serviceAccountPath = path.resolve(__dirname, 'serviceAccountKey.json');
+  }
+}
+
+const serviceAccount = require(serviceAccountPath);
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
@@ -31,8 +48,8 @@ async function deleteQueryBatch(query, resolve, reject) {
 
   const batch = db.batch();
   snapshot.docs.forEach((doc) => {
-    // If you wish to preserve the 3 fictional demo accounts, you can uncomment:
-    // if (doc.data().isDemo === true) return;
+    // Preserve demo items if marked
+    if (doc.data().isDemo === true) return;
     batch.delete(doc.ref);
   });
   await batch.commit();
@@ -44,7 +61,7 @@ async function deleteQueryBatch(query, resolve, reject) {
 
 async function wipeDatabase() {
   console.log('========================================================');
-  console.log('⚠️  STARTING COMPLETE DATABASE CLEANUP FOR PRODUCTION');
+  console.log(`⚠️  CLEANUP TARGET: [${serviceAccount.project_id}] (${isDev ? 'DEVELOPMENT' : 'PRODUCTION'})`);
   console.log('========================================================');
 
   const collections = [
@@ -57,30 +74,45 @@ async function wipeDatabase() {
   ];
 
   for (const col of collections) {
-    process.stdout.write(`Clearing collection: ${col}... `);
+    process.stdout.write(`Clearing non-demo documents from: ${col}... `);
     await deleteCollection(col);
     console.log('DONE ✅');
   }
 
-  console.log('Clearing users collection (preserving admin if needed)...');
+  console.log('Auditing users collection (preserving Admins, Technicians, and Demo accounts)...');
   const usersSnap = await db.collection('users').get();
   for (const doc of usersSnap.docs) {
     const data = doc.data();
-    // Keep test admin or demo accounts if desired, otherwise delete
-    if (data.email === 'test@admin.com') {
-      console.log(`Preserving master admin: ${data.email}`);
+
+    // 1. Keep demo accounts
+    if (data.isDemo === true) {
+      console.log(`  [Keep] Demo Account: ${data.name || data.email || doc.id}`);
       continue;
     }
+
+    // 2. Keep Admin accounts
+    if (data.role === 'admin' || data.email === 'test@admin.com') {
+      console.log(`  [Keep] Admin Account: ${data.email || data.name || doc.id}`);
+      continue;
+    }
+
+    // 3. Keep Technicians
+    if (data.role === 'technician') {
+      console.log(`  [Keep] Technician Account: ${data.name || data.email || doc.id}`);
+      continue;
+    }
+
+    // 4. Delete only test tenant accounts
+    console.log(`  [Delete] Test Tenant: ${data.name || data.phone || doc.id}`);
     await doc.ref.delete();
     try {
       await auth.deleteUser(doc.id);
     } catch (_) {}
   }
-  console.log('Users collection wiped ✅');
+  console.log('Users audit completed ✅');
 
   console.log('========================================================');
-  console.log('🎉 DATABASE HAS BEEN COMPLETELY RESET FOR FRESH SYNC!');
-  console.log('You can now run sync.js on your main PC with 100% confidence.');
+  console.log(`🎉 Database [${serviceAccount.project_id}] is clean and ready for fresh sync!`);
   console.log('========================================================');
 }
 
@@ -91,7 +123,7 @@ if (process.argv.includes('--confirm-wipe')) {
     process.exit(1);
   });
 } else {
-  console.log('⚠️ SAFETY SHIELD ACTIVE: To execute wipe, run with: node sync_service/wipe_all_data.js --confirm-wipe');
+  console.log('⚠️ SAFETY SHIELD ACTIVE: To execute wipe, run with:');
+  console.log('   node sync_service/wipe_all_data.js --confirm-wipe');
   process.exit(0);
 }
-

@@ -4,13 +4,27 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 
-// 1. Initialize Firebase Admin SDK
-let serviceAccountPath = path.resolve(__dirname, 'serviceAccountKey.json');
-if (!fs.existsSync(serviceAccountPath)) {
-  serviceAccountPath = path.resolve(__dirname, '../serviceAccountKey.json');
+// 1. Initialize Firebase Admin SDK (Supports --env=dev or --env=prod)
+const isDev = process.argv.includes('--env=dev') || process.argv.includes('--dev');
+let serviceAccountPath;
+
+if (isDev) {
+  serviceAccountPath = path.resolve(__dirname, 'serviceAccountKey.dev.json');
+  if (!fs.existsSync(serviceAccountPath)) {
+    serviceAccountPath = path.resolve(__dirname, 'serviceAccountKey.json');
+  }
+} else {
+  serviceAccountPath = path.resolve(__dirname, 'serviceAccountKey.prod.json');
+  if (!fs.existsSync(serviceAccountPath)) {
+    serviceAccountPath = path.resolve(__dirname, 'serviceAccountKey.json');
+  }
+  if (!fs.existsSync(serviceAccountPath)) {
+    serviceAccountPath = path.resolve(__dirname, '../serviceAccountKey.json');
+  }
 }
+
 if (!fs.existsSync(serviceAccountPath)) {
-  console.error('❌ Error: serviceAccountKey.json not found in sync_service or parent directory.');
+  console.error(`❌ Error: Service account key file not found (${serviceAccountPath}).`);
   process.exit(1);
 }
 
@@ -18,6 +32,10 @@ const serviceAccount = require(serviceAccountPath);
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
+
+console.log('========================================================');
+console.log(`🚀 [Sync Engine] Active Project: ${serviceAccount.project_id} [${isDev ? 'DEVELOPMENT / DEV' : 'PRODUCTION / PROD'}]`);
+console.log('========================================================');
 
 const db = admin.firestore();
 const auth = admin.auth();

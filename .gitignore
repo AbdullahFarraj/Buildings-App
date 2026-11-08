@@ -46,6 +46,7 @@ app.*.map.json
 
 # Security & Credentials (DO NOT COMMIT)
 *serviceAccountKey*.json
+*adminsdk*.json
 serviceAccountKey.json
 *.pem
 *.key
