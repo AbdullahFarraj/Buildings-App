@@ -70,8 +70,8 @@ class _SplashViewState extends State<SplashView> with SingleTickerProviderStateM
                 scale: _scaleAnimation.value,
                 child: Image.asset(
                   'assets/images/logo.png',
-                  width: 250,
-                  height: 250,
+                  width: 280,
+                  height: 380,
                   fit: BoxFit.contain,
                 ),
               ),
