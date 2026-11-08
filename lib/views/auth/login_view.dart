@@ -238,11 +238,15 @@ class _LoginViewState extends State<LoginView> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Image.asset(
-                    'assets/images/login_logo.png',
-                    width: double.infinity,
+                  Container(
                     height: 190,
-                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    color: const Color(0xFF0D131F),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Image.asset(
+                      'assets/images/login_logo.png',
+                      fit: BoxFit.contain,
+                    ),
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(28, 20, 28, 28),
