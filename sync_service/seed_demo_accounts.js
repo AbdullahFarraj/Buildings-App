@@ -1,12 +1,28 @@
 const admin = require('firebase-admin');
 const path = require('path');
+const fs = require('fs');
 
-const serviceAccount = require(path.resolve(__dirname, '../serviceAccountKey.json'));
+const isDev = process.argv.includes('--env=dev') || process.argv.includes('--dev');
+let serviceAccountPath;
+if (isDev) {
+  serviceAccountPath = path.resolve(__dirname, 'serviceAccountKey.dev.json');
+} else {
+  serviceAccountPath = path.resolve(__dirname, 'serviceAccountKey.prod.json');
+  if (!fs.existsSync(serviceAccountPath)) {
+    serviceAccountPath = path.resolve(__dirname, 'serviceAccountKey.json');
+  }
+  if (!fs.existsSync(serviceAccountPath)) {
+    serviceAccountPath = path.resolve(__dirname, '../serviceAccountKey.json');
+  }
+}
+
+const serviceAccount = require(serviceAccountPath);
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
   });
 }
+console.log(`🚀 [Seed Demo] Target Project: ${serviceAccount.project_id} [${isDev ? 'DEV' : 'PROD'}]`);
 
 const db = admin.firestore();
 const auth = admin.auth();
