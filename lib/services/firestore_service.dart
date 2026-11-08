@@ -542,11 +542,11 @@ class FirestoreService {
             .get();
         return aggregate.count ?? 0;
       }
-      final aggregate = await _tasksCollection
-          .where('status', isNotEqualTo: TaskStatus.completed.value)
-          .count()
-          .get();
-      return aggregate.count ?? 0;
+      final snapshot = await _tasksCollection.get();
+      return snapshot.docs.where((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return data['isDemo'] != true && data['status'] != TaskStatus.completed.value;
+      }).length;
     } catch (_) {
       return 0;
     }
@@ -563,11 +563,12 @@ class FirestoreService {
             .get();
         return aggregate.count ?? 0;
       }
-      final aggregate = await _firestore.collection('contracts').count().get();
-      return aggregate.count ?? 0;
-    } catch (_) {
       final snapshot = await _firestore.collection('contracts').get();
-      return snapshot.docs.length;
+      return snapshot.docs
+          .where((doc) => (doc.data() as Map<String, dynamic>)['isDemo'] != true)
+          .length;
+    } catch (_) {
+      return 0;
     }
   }
 
