@@ -220,7 +220,19 @@ async function runSync() {
 
     console.log('⏳ جاري استرجاع الشيكات وحالاتها الدقيقة (صرف، إرجاع، إعادة إيداع، سداد كاش)...');
     const chequesQuery = `
-      WITH LatestCollection AS (
+      WITH CollectionAgg AS (
+        SELECT 
+          col.CheckGuid,
+          MAX(CASE WHEN ISNULL(col.FixReturn, 0) = 1 OR ISNULL(col.Finished, 0) = 1 THEN 1 ELSE 0 END) AS hasFixReturn,
+          MAX(CASE WHEN 
+               col.Note LIKE '%cash%' OR col.Note LIKE '%كاش%' OR col.Note LIKE '%نقد%' OR col.Note LIKE '%سداد%' OR col.Note LIKE '%تسديد%' OR col.Note LIKE '%بدل%' OR col.Note LIKE '%استبدال%' OR col.Note LIKE '%replace%' OR col.Note LIKE '%rplc%'
+            OR col.ReturnCause LIKE '%cash%' OR col.ReturnCause LIKE '%كاش%' OR col.ReturnCause LIKE '%نقد%' OR col.ReturnCause LIKE '%سداد%' OR col.ReturnCause LIKE '%تسديد%' OR col.ReturnCause LIKE '%بدل%' OR col.ReturnCause LIKE '%استبدال%' OR col.ReturnCause LIKE '%replace%' OR col.ReturnCause LIKE '%rplc%'
+            OR col.FixReturnNote LIKE '%cash%' OR col.FixReturnNote LIKE '%كاش%' OR col.FixReturnNote LIKE '%نقد%' OR col.FixReturnNote LIKE '%سداد%' OR col.FixReturnNote LIKE '%تسديد%' OR col.FixReturnNote LIKE '%بدل%' OR col.FixReturnNote LIKE '%استبدال%' OR col.FixReturnNote LIKE '%replace%' OR col.FixReturnNote LIKE '%rplc%'
+          THEN 1 ELSE 0 END) AS hasCashNote
+        FROM ChecksCollection col
+        GROUP BY col.CheckGuid
+      ),
+      LatestCollection AS (
         SELECT 
           col.CheckGuid,
           col.Kind,
@@ -243,16 +255,21 @@ async function runSync() {
           LTRIM(RTRIM(c.Note))           AS notes,
           LTRIM(RTRIM(c.Note2))          AS notes2,
           LTRIM(RTRIM(c.Note3))          AS notes3,
+          LTRIM(RTRIM(lc.colNote))       AS colNote,
+          LTRIM(RTRIM(lc.ReturnCause))   AS returnCause,
+          LTRIM(RTRIM(lc.FixReturnNote)) AS fixReturnNote,
           c.ContractGuid                 AS contractGuid,
           c.Deposition                   AS deposition,
           CASE 
-            -- 1. If settled with cash / replaced with cash / fixReturn or finished:
-            WHEN lc.FixReturn = 1 OR lc.Finished = 1 
-                 OR c.Note LIKE '%cash%' OR c.Note LIKE '%كاش%'
-                 OR c.Note2 LIKE '%cash%' OR c.Note2 LIKE '%كاش%'
-                 OR c.Note3 LIKE '%cash%' OR c.Note3 LIKE '%كاش%'
-                 OR lc.colNote LIKE '%replace with cash%' OR lc.colNote LIKE '%rplc with cash%'
-                 OR lc.ReturnCause LIKE '%replace with cash%' OR lc.ReturnCause LIKE '%rplc with cash%'
+            -- 1. If settled with cash / replaced with cash / fixReturn or finished or has cash/settlement notes:
+            WHEN ISNULL(ca.hasFixReturn, 0) = 1 OR ISNULL(ca.hasCashNote, 0) = 1
+                 OR ISNULL(lc.FixReturn, 0) = 1 OR ISNULL(lc.Finished, 0) = 1 
+                 OR c.Note LIKE '%cash%' OR c.Note LIKE '%كاش%' OR c.Note LIKE '%نقد%' OR c.Note LIKE '%سداد%' OR c.Note LIKE '%تسديد%' OR c.Note LIKE '%بدل%'
+                 OR c.Note2 LIKE '%cash%' OR c.Note2 LIKE '%كاش%' OR c.Note2 LIKE '%نقد%' OR c.Note2 LIKE '%سداد%' OR c.Note2 LIKE '%تسديد%' OR c.Note2 LIKE '%بدل%'
+                 OR c.Note3 LIKE '%cash%' OR c.Note3 LIKE '%كاش%' OR c.Note3 LIKE '%نقد%' OR c.Note3 LIKE '%سداد%' OR c.Note3 LIKE '%تسديد%' OR c.Note3 LIKE '%بدل%'
+                 OR lc.colNote LIKE '%cash%' OR lc.colNote LIKE '%كاش%' OR lc.colNote LIKE '%نقد%' OR lc.colNote LIKE '%سداد%' OR lc.colNote LIKE '%تسديد%' OR lc.colNote LIKE '%replace%' OR lc.colNote LIKE '%rplc%'
+                 OR lc.ReturnCause LIKE '%cash%' OR lc.ReturnCause LIKE '%كاش%' OR lc.ReturnCause LIKE '%نقد%' OR lc.ReturnCause LIKE '%سداد%' OR lc.ReturnCause LIKE '%تسديد%' OR lc.ReturnCause LIKE '%replace%' OR lc.ReturnCause LIKE '%rplc%'
+                 OR lc.FixReturnNote LIKE '%cash%' OR lc.FixReturnNote LIKE '%كاش%' OR lc.FixReturnNote LIKE '%نقد%' OR lc.FixReturnNote LIKE '%سداد%' OR lc.FixReturnNote LIKE '%تسديد%' OR lc.FixReturnNote LIKE '%replace%' OR lc.FixReturnNote LIKE '%rplc%'
               THEN 'paid_cash'
             
             -- 2. If latest action is Deposit (Kind = 1) or c.Deposition = 1 (and not returned):
@@ -274,6 +291,7 @@ async function runSync() {
       FROM Checks c
       INNER JOIN vwLeaseApartment v ON c.ContractGuid = v.Guid
       LEFT JOIN LatestCollection lc ON lc.CheckGuid = c.Guid AND lc.rn = 1
+      LEFT JOIN CollectionAgg ca ON ca.CheckGuid = c.Guid
       WHERE LTRIM(RTRIM(v.ContractState)) = 'valid'
         AND YEAR(v.ToDate) >= YEAR(GETDATE())
         AND (c.DueDate IS NULL OR YEAR(c.DueDate) >= YEAR(GETDATE()))
@@ -763,7 +781,14 @@ async function runSync() {
 
           const chequeRef = db.collection('cheques').doc(chequeDocId);
           const chequeStatus = ch.chequeStatus || (ch.isDeposited ? 'paid' : 'pending');
-          const effectiveNotes = [ch.notes, ch.notes2, ch.notes3].filter(n => n && String(n).trim().length > 0).join(' | ');
+          const effectiveNotes = [
+            ch.notes, 
+            ch.notes2, 
+            ch.notes3,
+            ch.returnCause ? `سبب الإرجاع: ${ch.returnCause}` : null,
+            ch.fixReturnNote ? `المعالجة: ${ch.fixReturnNote}` : null,
+            ch.colNote ? `ملاحظة التحصيل: ${ch.colNote}` : null
+          ].filter(n => n && String(n).trim().length > 0).join(' | ');
 
           const chequeData = {
             tenantUid: uid,

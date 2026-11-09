@@ -218,7 +218,8 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                       ),
                       items: const [
                         DropdownMenuItem(value: 'pending', child: Text('Pending')),
-                        DropdownMenuItem(value: 'paid', child: Text('Paid / Cleared')),
+                        DropdownMenuItem(value: 'paid', child: Text('Paid / Cleared (Bank)')),
+                        DropdownMenuItem(value: 'paid_cash', child: Text('Paid (Cash) 💵')),
                         DropdownMenuItem(value: 'bounced', child: Text('Bounced')),
                         DropdownMenuItem(value: 'cancelled', child: Text('Cancelled')),
                       ],
@@ -418,7 +419,8 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                       decoration: const InputDecoration(labelText: 'Cheque Status', border: OutlineInputBorder()),
                       items: const [
                         DropdownMenuItem(value: 'pending', child: Text('Pending')),
-                        DropdownMenuItem(value: 'paid', child: Text('Paid / Cleared')),
+                        DropdownMenuItem(value: 'paid', child: Text('Paid / Cleared (Bank)')),
+                        DropdownMenuItem(value: 'paid_cash', child: Text('Paid (Cash) 💵')),
                         DropdownMenuItem(value: 'bounced', child: Text('Bounced')),
                         DropdownMenuItem(value: 'cancelled', child: Text('Cancelled')),
                       ],
@@ -955,7 +957,8 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
         List<ChequeModel> filteredCheques = allCheques.where((c) {
           if (_chequeFilter == 'pending') return c.isPending && !c.isOverdue;
           if (_chequeFilter == 'due_soon') return c.isDueSoon;
-          if (_chequeFilter == 'paid') return c.isPaid;
+          if (_chequeFilter == 'paid') return c.isPaid && !c.isPaidCash;
+          if (_chequeFilter == 'paid_cash') return c.isPaidCash;
           if (_chequeFilter == 'overdue') return c.isOverdue;
           if (_chequeFilter == 'bounced') return c.isBounced;
           return true;
@@ -1025,6 +1028,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                     _buildFilterChip('Pending', 'pending'),
                     _buildFilterChip('Due Soon', 'due_soon'),
                     _buildFilterChip('Paid / Cleared', 'paid'),
+                    _buildFilterChip('Paid (Cash) 💵', 'paid_cash'),
                     _buildFilterChip('Overdue ($overdueCount)', 'overdue', isAlert: overdueCount > 0),
                     _buildFilterChip('Bounced', 'bounced'),
                   ],
@@ -1308,7 +1312,10 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
     Color badgeColor;
     String badgeText;
 
-    if (cheque.isPaid) {
+    if (cheque.isPaidCash) {
+      badgeColor = Colors.teal;
+      badgeText = 'Paid (Cash) 💵';
+    } else if (cheque.isPaid) {
       badgeColor = Colors.green;
       badgeText = 'Cleared / Paid ✅';
     } else if (cheque.isBounced) {

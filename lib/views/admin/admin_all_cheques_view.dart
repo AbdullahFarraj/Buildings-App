@@ -97,7 +97,8 @@ class _AdminAllChequesViewState extends State<AdminAllChequesView> {
         bool matchesStatus = true;
         if (_statusFilter == 'pending') matchesStatus = c.isPending && !c.isOverdue;
         if (_statusFilter == 'due_soon') matchesStatus = c.isDueSoon;
-        if (_statusFilter == 'paid') matchesStatus = c.isPaid;
+        if (_statusFilter == 'paid') matchesStatus = c.isPaid && !c.isPaidCash;
+        if (_statusFilter == 'paid_cash') matchesStatus = c.isPaidCash;
         if (_statusFilter == 'overdue') matchesStatus = c.isOverdue;
         if (_statusFilter == 'bounced') matchesStatus = c.isBounced;
 
@@ -220,7 +221,8 @@ class _AdminAllChequesViewState extends State<AdminAllChequesView> {
                       _buildStatusChip('All ($totalCount)', 'all'),
                       _buildStatusChip('Pending', 'pending'),
                       _buildStatusChip('Due Soon', 'due_soon'),
-                      _buildStatusChip('Paid', 'paid'),
+                      _buildStatusChip('Paid (Bank)', 'paid'),
+                      _buildStatusChip('Paid (Cash) 💵', 'paid_cash'),
                       _buildStatusChip('Overdue ($overdueCount)', 'overdue', isAlert: overdueCount > 0),
                       _buildStatusChip('Bounced', 'bounced'),
                     ],
@@ -341,7 +343,10 @@ class _AdminAllChequesViewState extends State<AdminAllChequesView> {
 
           Color badgeColor;
           String badgeText;
-          if (cheque.isPaid) {
+          if (cheque.isPaidCash) {
+            badgeColor = Colors.teal;
+            badgeText = 'Paid (Cash) 💵';
+          } else if (cheque.isPaid) {
             badgeColor = Colors.green;
             badgeText = 'Paid ✅';
           } else if (cheque.isBounced) {

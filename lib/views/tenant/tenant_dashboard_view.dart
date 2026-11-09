@@ -531,8 +531,20 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
               )
             else
               ...cheques.map((c) {
-                Color statusColor = c.isPaid ? Colors.green : (c.isOverdue ? Colors.red : Colors.blueGrey);
-                String statusLabel = c.isPaid ? 'Paid ✅' : (c.isOverdue ? 'Overdue ⚠️' : 'Pending ⏳');
+                Color statusColor = c.isPaidCash
+                    ? Colors.teal
+                    : (c.isPaid
+                        ? Colors.green
+                        : (c.isBounced
+                            ? Colors.red
+                            : (c.isOverdue ? Colors.red : Colors.blueGrey)));
+                String statusLabel = c.isPaidCash
+                    ? 'Paid (Cash) 💵'
+                    : (c.isPaid
+                        ? 'Paid ✅'
+                        : (c.isBounced
+                            ? 'Bounced ❌'
+                            : (c.isOverdue ? 'Overdue ⚠️' : 'Pending ⏳')));
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 12),
