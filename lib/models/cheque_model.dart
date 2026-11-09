@@ -37,7 +37,8 @@ class ChequeModel {
     this.updatedAt,
   });
 
-  bool get isPaid => status.toLowerCase() == 'paid';
+  bool get isPaid => status.toLowerCase() == 'paid' || status.toLowerCase() == 'paid_cash';
+  bool get isPaidCash => status.toLowerCase() == 'paid_cash';
   bool get isBounced => status.toLowerCase() == 'bounced';
   bool get isCancelled => status.toLowerCase() == 'cancelled';
   bool get isPending => status.toLowerCase() == 'pending';
@@ -58,13 +59,14 @@ class ChequeModel {
   }
 
   bool get isDueSoon {
-    if (isPaid || isCancelled || isOverdue) return false;
+    if (isPaid || isCancelled || isOverdue || isBounced) return false;
     return daysUntilDue >= 0 && daysUntilDue <= 15;
   }
 
   String get displayStatusArabic => displayStatusEnglish;
 
   String get displayStatusEnglish {
+    if (isPaidCash) return 'Paid (Cash)';
     if (isPaid) return 'Paid';
     if (isBounced) return 'Bounced';
     if (isCancelled) return 'Cancelled';

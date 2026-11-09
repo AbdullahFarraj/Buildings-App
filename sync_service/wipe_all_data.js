@@ -28,35 +28,27 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 const auth = admin.auth();
 
-async function deleteCollection(collectionPath, batchSize = 100) {
-  const collectionRef = db.collection(collectionPath);
-  const query = collectionRef.limit(batchSize);
+async function deleteNonDemoDocs(collectionName) {
+  const snap = await db.collection(collectionName).get();
+  const toDelete = snap.docs.filter(doc => doc.data().isDemo !== true);
 
-  return new Promise((resolve, reject) => {
-    deleteQueryBatch(query, resolve, reject);
-  });
-}
-
-async function deleteQueryBatch(query, resolve, reject) {
-  const snapshot = await query.get();
-
-  const batchSize = snapshot.size;
-  if (batchSize === 0) {
-    resolve();
+  if (toDelete.length === 0) {
+    console.log(`Clearing ${collectionName}... 0 non-demo docs to delete. ✅`);
     return;
   }
 
-  const batch = db.batch();
-  snapshot.docs.forEach((doc) => {
-    // Preserve demo items if marked
-    if (doc.data().isDemo === true) return;
-    batch.delete(doc.ref);
-  });
-  await batch.commit();
-
-  process.nextTick(() => {
-    deleteQueryBatch(query, resolve, reject);
-  });
+  process.stdout.write(`Clearing ${toDelete.length} non-demo documents from ${collectionName}... `);
+  
+  // Batch delete in chunks of 400
+  for (let i = 0; i < toDelete.length; i += 400) {
+    const chunk = toDelete.slice(i, i + 400);
+    const batch = db.batch();
+    for (const doc of chunk) {
+      batch.delete(doc.ref);
+    }
+    await batch.commit();
+  }
+  console.log('DONE ✅');
 }
 
 async function wipeDatabase() {
@@ -74,42 +66,48 @@ async function wipeDatabase() {
   ];
 
   for (const col of collections) {
-    process.stdout.write(`Clearing non-demo documents from: ${col}... `);
-    await deleteCollection(col);
-    console.log('DONE ✅');
+    await deleteNonDemoDocs(col);
   }
 
   console.log('Auditing users collection (preserving Admins, Technicians, and Demo accounts)...');
   const usersSnap = await db.collection('users').get();
+  let deletedTenants = 0;
+  let keptUsers = 0;
+
   for (const doc of usersSnap.docs) {
     const data = doc.data();
 
     // 1. Keep demo accounts
-    if (data.isDemo === true) {
+    if (data.isDemo === true || (data.email && data.email.toLowerCase().startsWith('demo.'))) {
       console.log(`  [Keep] Demo Account: ${data.name || data.email || doc.id}`);
+      keptUsers++;
       continue;
     }
 
     // 2. Keep Admin accounts
     if (data.role === 'admin' || data.email === 'test@admin.com') {
       console.log(`  [Keep] Admin Account: ${data.email || data.name || doc.id}`);
+      keptUsers++;
       continue;
     }
 
     // 3. Keep Technicians
     if (data.role === 'technician') {
       console.log(`  [Keep] Technician Account: ${data.name || data.email || doc.id}`);
+      keptUsers++;
       continue;
     }
 
-    // 4. Delete only test tenant accounts
-    console.log(`  [Delete] Test Tenant: ${data.name || data.phone || doc.id}`);
+    // 4. Delete only test tenant accounts from Firestore & Auth
+    console.log(`  [Delete] Test Tenant: ${data.name || data.phone || doc.id} (${data.email})`);
     await doc.ref.delete();
     try {
       await auth.deleteUser(doc.id);
     } catch (_) {}
+    deletedTenants++;
   }
-  console.log('Users audit completed ✅');
+
+  console.log(`\nUsers audit completed: ${keptUsers} kept, ${deletedTenants} test tenants deleted. ✅`);
 
   console.log('========================================================');
   console.log(`🎉 Database [${serviceAccount.project_id}] is clean and ready for fresh sync!`);

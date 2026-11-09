@@ -2,6 +2,7 @@ const sql = require('mssql/msnodesqlv8');
 const admin = require('firebase-admin');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const crypto = require('crypto');
 
 // 1. Initialize Firebase Admin SDK (Supports --env=dev or --env=prod)
@@ -10,9 +11,6 @@ let serviceAccountPath;
 
 if (isDev) {
   serviceAccountPath = path.resolve(__dirname, 'serviceAccountKey.dev.json');
-  if (!fs.existsSync(serviceAccountPath)) {
-    serviceAccountPath = path.resolve(__dirname, 'serviceAccountKey.json');
-  }
 } else {
   serviceAccountPath = path.resolve(__dirname, 'serviceAccountKey.prod.json');
   if (!fs.existsSync(serviceAccountPath)) {
@@ -29,6 +27,12 @@ if (!fs.existsSync(serviceAccountPath)) {
 }
 
 const serviceAccount = require(serviceAccountPath);
+const expectedProjectId = isDev ? 'binshafar-properties-dev' : 'building-app1';
+if (serviceAccount.project_id !== expectedProjectId) {
+  console.error(`❌ Error: Environment mismatch! Expected project "${expectedProjectId}" but key has "${serviceAccount.project_id}".`);
+  process.exit(1);
+}
+
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
@@ -40,24 +44,70 @@ console.log('========================================================');
 const db = admin.firestore();
 const auth = admin.auth();
 
-// 2. SQL Server Configuration
-// 👇 غيّر اسم السيرفر واسم قاعدة البيانات هنا إذا نقلت الملف لكمبيوتر آخر 👇
-const SQL_SERVER = process.env.SQL_SERVER || 'ABDULLAH-LAP\\SQLEXPRESS'; // مثال: 'localhost\\SQLEXPRESS' أو 'SERVER-NAME\\SQLEXPRESS' أو '.'
-const SQL_DATABASE = process.env.SQL_DATABASE || 'AlAqaree7';
+// 2. SQL Server Configuration (Auto-detects local SQL Server & Driver, or reads sql_config.json)
+let fileSqlConfig = {};
+const sqlConfigPath = path.resolve(__dirname, 'sql_config.json');
+if (fs.existsSync(sqlConfigPath)) {
+  try {
+    fileSqlConfig = JSON.parse(fs.readFileSync(sqlConfigPath, 'utf8'));
+  } catch (_) {}
+}
 
-const sqlConfig = {
-  connectionString: `Driver={SQL Server Native Client 10.0};Server=${SQL_SERVER};Database=${SQL_DATABASE};Trusted_Connection=yes;`,
-  server: SQL_SERVER,
-  database: SQL_DATABASE,
-  driver: 'msnodesqlv8',
-  requestTimeout: 120000,
-  options: {
-    trustedConnection: true,
-    trustServerCertificate: true,
-    useUTC: false,
-    requestTimeout: 120000
+const configuredServer = process.env.SQL_SERVER || fileSqlConfig.server || 'AUTO';
+const SQL_DATABASE = process.env.SQL_DATABASE || fileSqlConfig.database || 'AlAqaree7';
+
+async function connectToSqlServer() {
+  const host = os.hostname();
+  const serverCandidates = configuredServer && configuredServer.toUpperCase() !== 'AUTO'
+    ? [configuredServer, `${host}\\SQLEXPRESS`, '.\\SQLEXPRESS', host, '.']
+    : [`${host}\\SQLEXPRESS`, '.\\SQLEXPRESS', 'localhost\\SQLEXPRESS', host, '.', 'ABDULLAH-LAP\\SQLEXPRESS'];
+
+  const uniqueServers = [...new Set(serverCandidates.filter(Boolean))];
+  const driverCandidates = [
+    '{SQL Server Native Client 10.0}',
+    '{SQL Server Native Client 11.0}',
+    '{ODBC Driver 17 for SQL Server}',
+    '{ODBC Driver 18 for SQL Server}',
+    '{SQL Server}'
+  ];
+
+  let lastErr = null;
+  for (const srv of uniqueServers) {
+    for (const drv of driverCandidates) {
+      const connStr = `Driver=${drv};Server=${srv};Database=${SQL_DATABASE};Trusted_Connection=yes;Encrypt=no;TrustServerCertificate=yes;`;
+      const cfg = {
+        connectionString: connStr,
+        server: srv,
+        database: SQL_DATABASE,
+        driver: 'msnodesqlv8',
+        requestTimeout: 120000,
+        options: {
+          trustedConnection: true,
+          trustServerCertificate: true,
+          useUTC: false,
+          requestTimeout: 120000
+        }
+      };
+      try {
+        const pool = await new sql.ConnectionPool(cfg).connect();
+        console.log(`✅ تم الاتصال بقاعدة البيانات بنجاح: السيرفر (${srv}) | قاعدة البيانات (${SQL_DATABASE})`);
+        return pool;
+      } catch (err) {
+        lastErr = err;
+        const msg = String(err.message || '');
+        // If driver itself is not installed on this machine, skip to next driver immediately
+        if (msg.includes('Data source name not found') || msg.includes('IM002')) {
+          continue;
+        }
+        // If server wasn't found, no need to try other drivers for the same non-existent server name
+        if (msg.includes('Error Locating Server') || msg.includes('Server is not found')) {
+          break;
+        }
+      }
+    }
   }
-};
+  throw lastErr || new Error('تعذر الاتصال بقاعدة بيانات SQL Server.');
+}
 
 // 3. UAE Mobile Number Sanitizer (Target: 9715xxxxxxxx - 12 digits)
 function sanitizeUaeMobile(rawMobile) {
@@ -129,15 +179,16 @@ function extractValidEmail(rawEmail, fallbackIdentifier) {
 // 5. Main Synchronization Flow
 async function runSync() {
   console.log('========================================================');
-  console.log('🚀 بدء مزامنة عقود الإيجار مع Firebase (EliteLivingre / العقاري)...');
+  console.log('🚀 بدء مزامنة عقود الإيجار مع Firebase (Saeed BinShafar Properties / العقاري)...');
   console.log('========================================================');
 
   let pool;
   try {
-    console.log(`⏳ جاري الاتصال بقاعدة بيانات SQL Server (${SQL_SERVER})...`);
-    pool = await new sql.ConnectionPool(sqlConfig).connect();
-    console.log('✅ تم الاتصال بقاعدة البيانات بنجاح.');
+    console.log(`⏳ جاري البحث والاتصال بقاعدة بيانات SQL Server (${SQL_DATABASE})...`);
+    pool = await connectToSqlServer();
 
+    // Fetch active & renewed contracts for the current year and upcoming years
+    // Filter strictly by ContractState = 'valid' to match the system's exact active contracts count
     const query = `
       SELECT 
           LTRIM(RTRIM(v.ContractNo))            AS contractCode,
@@ -157,18 +208,31 @@ async function runSync() {
           v.Guid                                AS contractGuid
       FROM vwLeaseApartment v
       LEFT JOIN Customer c ON v.CustomerGuid = c.Guid
-      WHERE LTRIM(RTRIM(v.ContractState)) != 'Expired contract and terminated'
+      WHERE LTRIM(RTRIM(v.ContractState)) = 'valid'
         AND YEAR(v.ToDate) >= YEAR(GETDATE())
-      ORDER BY v.CustName, v.BuildingName, v.FlatNo;
+      ORDER BY v.CustName, v.BuildingName, v.FlatNo, v.ToDate DESC, v.FromDate DESC;
     `;
 
-    console.log('⏳ جاري استرجاع العقود النشطة للسنة الحالية وما بعدها...');
+    console.log('⏳ جاري استرجاع العقود السارية والمجددة للسنة الحالية والسنوات القادمة...');
     const result = await pool.request().query(query);
     const rows = result.recordset;
-    console.log(`📋 تم استرجاع ${rows.length} عقداً من قاعدة البيانات.`);
+    console.log(`📋 تم استرجاع ${rows.length} عقداً نشطاً من قاعدة البيانات.`);
 
-    console.log('⏳ جاري استرجاع جميع الشيكات المرتبطة بالعقود (جدول Checks و ChecksCollection)...');
+    console.log('⏳ جاري استرجاع الشيكات وحالاتها الدقيقة (صرف، إرجاع، إعادة إيداع، سداد كاش)...');
     const chequesQuery = `
+      WITH LatestCollection AS (
+        SELECT 
+          col.CheckGuid,
+          col.Kind,
+          col.Date AS actionDate,
+          col.Finished,
+          col.FixReturn,
+          col.FixReturnNote,
+          col.ReturnCause,
+          col.Note AS colNote,
+          ROW_NUMBER() OVER (PARTITION BY col.CheckGuid ORDER BY col.Date DESC) AS rn
+        FROM ChecksCollection col
+      )
       SELECT 
           c.Guid                         AS checkGuid,
           LTRIM(RTRIM(c.NO))             AS chequeNumber,
@@ -177,16 +241,43 @@ async function runSync() {
           c.Date                         AS date,
           LTRIM(RTRIM(c.BankName))       AS bankName,
           LTRIM(RTRIM(c.Note))           AS notes,
+          LTRIM(RTRIM(c.Note2))          AS notes2,
+          LTRIM(RTRIM(c.Note3))          AS notes3,
           c.ContractGuid                 AS contractGuid,
+          c.Deposition                   AS deposition,
           CASE 
-            WHEN c.Deposition = 1 THEN 1
-            WHEN EXISTS (SELECT 1 FROM ChecksCollection col WHERE col.CheckGuid = c.Guid AND col.Kind = 1) THEN 1
-            ELSE 0 
-          END                            AS isDeposited,
-          (SELECT TOP 1 col.Date FROM ChecksCollection col WHERE col.CheckGuid = c.Guid AND col.Kind = 1) AS depositDate
+            -- 1. If settled with cash / replaced with cash / fixReturn or finished:
+            WHEN lc.FixReturn = 1 OR lc.Finished = 1 
+                 OR c.Note LIKE '%cash%' OR c.Note LIKE '%كاش%'
+                 OR c.Note2 LIKE '%cash%' OR c.Note2 LIKE '%كاش%'
+                 OR c.Note3 LIKE '%cash%' OR c.Note3 LIKE '%كاش%'
+                 OR lc.colNote LIKE '%replace with cash%' OR lc.colNote LIKE '%rplc with cash%'
+                 OR lc.ReturnCause LIKE '%replace with cash%' OR lc.ReturnCause LIKE '%rplc with cash%'
+              THEN 'paid_cash'
+            
+            -- 2. If latest action is Deposit (Kind = 1) or c.Deposition = 1 (and not returned):
+            -- Handles re-deposited cheques where latest action in ChecksCollection is Kind = 1
+            WHEN lc.Kind = 1 OR (c.Deposition = 1 AND (lc.Kind IS NULL OR lc.Kind != 3))
+              THEN 'paid'
+            
+            -- 3. If latest action is Return / Bounced (Kind = 3) and not re-deposited yet:
+            WHEN lc.Kind = 3
+              THEN 'bounced'
+            
+            -- 4. Otherwise: Pending
+            ELSE 'pending'
+          END                            AS chequeStatus,
+          CASE 
+            WHEN lc.Kind = 1 THEN lc.actionDate
+            ELSE NULL
+          END                            AS depositDate
       FROM Checks c
-      WHERE c.ContractGuid IS NOT NULL
-        AND (c.DueDate IS NULL OR YEAR(c.DueDate) >= YEAR(GETDATE()));
+      INNER JOIN vwLeaseApartment v ON c.ContractGuid = v.Guid
+      LEFT JOIN LatestCollection lc ON lc.CheckGuid = c.Guid AND lc.rn = 1
+      WHERE LTRIM(RTRIM(v.ContractState)) = 'valid'
+        AND YEAR(v.ToDate) >= YEAR(GETDATE())
+        AND (c.DueDate IS NULL OR YEAR(c.DueDate) >= YEAR(GETDATE()))
+      ORDER BY c.DueDate ASC, c.NO ASC;
     `;
     const chequesResult = await pool.request().query(chequesQuery);
     const chequesRows = chequesResult.recordset;
@@ -215,10 +306,15 @@ async function runSync() {
     }
     console.log(`📒 تم استرجاع أرصدة دفتر الأستاذ لـ ${ledgerByCustomerGuid.size} عميلاً.`);
 
-    // Group cheques by contractGuid
+    // Group cheques by contractGuid (deduplicated by checkGuid / chequeNumber)
     const chequesByContractGuid = new Map();
+    const seenCheckGuids = new Set();
     for (const ch of chequesRows) {
       if (!ch.contractGuid) continue;
+      const chkKey = ch.checkGuid ? String(ch.checkGuid).toLowerCase() : `${ch.contractGuid}_${ch.chequeNumber}`;
+      if (seenCheckGuids.has(chkKey)) continue;
+      seenCheckGuids.add(chkKey);
+
       const key = String(ch.contractGuid).toLowerCase();
       if (!chequesByContractGuid.has(key)) {
         chequesByContractGuid.set(key, []);
@@ -267,28 +363,32 @@ async function runSync() {
     const userByEmail = new Map();
     const userByName = new Map();
 
-    // Pre-fetch existing Firestore users FIRST so we know which UIDs are admin/technician
+    // Pre-fetch existing Firestore users FIRST so we know which UIDs are admin/technician/demo
     const firestoreUsersSnap = await db.collection('users').get();
     const firestoreDataByUid = new Map();
     const nonTenantUids = new Set();
+    const protectedUids = new Set();
     for (const doc of firestoreUsersSnap.docs) {
       const data = doc.data();
       firestoreDataByUid.set(doc.id, data);
+      if (data.role === 'admin' || data.role === 'technician' || data.isDemo === true) {
+        protectedUids.add(doc.id);
+      }
       if (data.role === 'admin' || data.role === 'technician') {
         nonTenantUids.add(doc.id);
       }
     }
 
     for (const u of allUsersResult.users) {
-      // Never match a tenant contract onto an Admin or Technician account
-      if (nonTenantUids.has(u.uid)) continue;
+      // Never match a real tenant contract onto an Admin, Technician, or Demo account
+      if (protectedUids.has(u.uid)) continue;
       if (u.phoneNumber) userByPhone.set(u.phoneNumber, u);
       if (u.email) userByEmail.set(u.email.toLowerCase(), u);
       if (u.displayName) userByName.set(normalizeTenantName(u.displayName).toLowerCase(), u);
     }
 
     for (const [docId, data] of firestoreDataByUid.entries()) {
-      if (nonTenantUids.has(docId)) continue;
+      if (protectedUids.has(docId)) continue;
       const syntheticUser = { uid: docId, ...data };
       const sanitizedDocPhone = sanitizeUaeMobile(data.phone);
       if (sanitizedDocPhone && !userByPhone.has(`+${sanitizedDocPhone}`)) {
@@ -311,6 +411,12 @@ async function runSync() {
     let authCreatedCount = 0;
     let authExistingCount = 0;
 
+    // Sets to track active documents for post-sync cleanup of old/terminated/duplicate records
+    const activeContractDocIds = new Set();
+    const activeChequeDocIds = new Set();
+    const activeTenantUids = new Set();
+    const activePhoneIndexIds = new Set();
+
     // We will collect batched operations (max 400 per batch)
     let currentBatch = db.batch();
     let currentBatchOps = 0;
@@ -325,14 +431,18 @@ async function runSync() {
       }
     }
 
-    // Group rows by customer identity.
-    // ⚠️ Previously grouped by NAME only, which merged different tenants sharing the same name
-    // into one account (each could see the other's contracts). Now:
-    //   1) group by CustomerGuid (the real customer ID in SQL Server), falling back to name
-    //   2) then merge groups that share the same valid mobile number (same person, duplicate customer records)
+    // Group rows by customer identity (CustomerGuid + shared valid mobile number)
+    // Also deduplicate contracts by contractCode/contractGuid in case a view returns duplicate rows
     console.log('⏳ جاري تجميع كافة العقود حسب هوية العميل (CustomerGuid + رقم الهاتف)...');
     const rawGroups = new Map();
+    const seenContractKeys = new Set();
     for (const row of rows) {
+      const uniqueContractKey = row.contractGuid
+        ? String(row.contractGuid).toLowerCase()
+        : String(row.contractCode || `${row.buildingName}_${row.unitNumber}_${row.contractNumber}`).toLowerCase();
+      if (seenContractKeys.has(uniqueContractKey)) continue;
+      seenContractKeys.add(uniqueContractKey);
+
       const normName = normalizeTenantName(row.tenantName);
       const key = row.customerGuid
         ? `guid:${String(row.customerGuid).toLowerCase()}`
@@ -369,9 +479,9 @@ async function runSync() {
       target.rawMobiles.push(...g.rawMobiles);
       target.customerEmails.push(...g.customerEmails);
     }
-    console.log(`👥 تم العثور على ${tenantGroups.size} مستأجر فريد من أصل ${rows.length} عقداً نشطاً.`);
+    console.log(`👥 تم العثور على ${tenantGroups.size} مستأجر فريد من أصل ${seenContractKeys.size} عقداً نشطاً.`);
 
-    // Report names shared by more than one distinct tenant (these were wrongly merged before)
+    // Report names shared by more than one distinct tenant
     const nameCounts = new Map();
     for (const g of tenantGroups.values()) {
       const n = g.name.toLowerCase();
@@ -379,15 +489,56 @@ async function runSync() {
     }
     const sharedNames = [...nameCounts.entries()].filter(([, c]) => c > 1);
     if (sharedNames.length) {
-      console.log(`⚠️ ${sharedNames.length} اسم مشترك بين أكثر من مستأجر مختلف (تم فصلهم الآن):`);
+      console.log(`⚠️ ${sharedNames.length} اسم مشترك بين أكثر من مستأجر مختلف (تم فصلهم):`);
       for (const [n, c] of sharedNames) console.log(`   - ${n} (${c} مستأجرين)`);
     }
 
-    // Tracks which tenant group already claimed a uid in this run (prevents merging by name)
+    // Tracks which tenant group already claimed a uid or email in this run
     const claimedUids = new Map();
+    const claimedEmails = new Set();
+
+    // Pre-analyze shared emails across different tenantGroups so the tenant whose name matches the email gets priority
+    const emailOwners = new Map();
+    for (const g of tenantGroups.values()) {
+      const pMob = g.rawMobiles.map(sanitizeUaeMobile).find(Boolean) || null;
+      for (const rawEm of g.customerEmails) {
+        const parsed = extractValidEmail(rawEm, pMob);
+        if (parsed && !parsed.includes('nocode') && !parsed.endsWith('@elitelivingre.ae')) {
+          if (!emailOwners.has(parsed)) emailOwners.set(parsed, []);
+          emailOwners.get(parsed).push(g);
+        }
+      }
+    }
+    const preferredGroupForEmail = new Map();
+    for (const [em, groups] of emailOwners.entries()) {
+      if (groups.length === 1) {
+        preferredGroupForEmail.set(em, groups[0].key);
+      } else {
+        const localPart = em.split('@')[0].replace(/[^a-z]/gi, '').toLowerCase();
+        let bestGroup = groups[0];
+        for (const grp of groups) {
+          const nameWords = grp.name.toLowerCase().split(/\s+/).filter(w => w.length >= 3);
+          if (nameWords.some(w => localPart.includes(w))) {
+            bestGroup = grp;
+            break;
+          }
+        }
+        preferredGroupForEmail.set(em, bestGroup.key);
+      }
+    }
 
     console.log('⏳ جاري معالجة العقود، ربط العقارات بالحسابات، وتحديث الفايربيس...');
     for (const group of tenantGroups.values()) {
+      // Sort tenant's contracts so the newest/renewed contract (highest endDate) comes first
+      group.contracts.sort((a, b) => {
+        const endA = a.endDate ? new Date(a.endDate).getTime() : 0;
+        const endB = b.endDate ? new Date(b.endDate).getTime() : 0;
+        if (endB !== endA) return endB - endA;
+        const startA = a.startDate ? new Date(a.startDate).getTime() : 0;
+        const startB = b.startDate ? new Date(b.startDate).getTime() : 0;
+        return startB - startA;
+      });
+
       // 1. Gather all unique valid UAE mobile numbers for this tenant
       const validMobiles = [];
       for (const rawM of group.rawMobiles) {
@@ -399,45 +550,59 @@ async function runSync() {
       const primaryMobile = validMobiles[0] || null;
       const rawPhone = group.rawMobiles.find(m => m && String(m).trim().length > 0) || '';
 
-      // 2. Resolve email (prefer real customer email, then phone@elitelivingre.ae, then slug)
+      // 2. Resolve email (prefer real customer email if not claimed by another tenant, else phone@elitelivingre.ae, else slug)
       let email = null;
       for (const rawEmail of group.customerEmails) {
         const parsed = extractValidEmail(rawEmail, primaryMobile);
         if (parsed && !parsed.includes('nocode')) {
-          email = parsed;
-          break;
+          const preferredKey = preferredGroupForEmail.get(parsed);
+          if ((!preferredKey || preferredKey === group.key) && !claimedEmails.has(parsed)) {
+            email = parsed;
+            break;
+          }
         }
       }
       if (!email) {
-        if (primaryMobile) {
+        if (primaryMobile && !claimedEmails.has(`${primaryMobile}@elitelivingre.ae`)) {
           email = `${primaryMobile}@elitelivingre.ae`;
         } else {
           const nameHash = crypto.createHash('sha256').update(group.key).digest('hex').substring(0, 16);
           email = `tenant_${nameHash}@elitelivingre.ae`;
         }
       }
+      claimedEmails.add(email.toLowerCase());
 
       // Default password: phone if available, else Elite@123456
       const defaultPassword = primaryMobile || 'Elite@123456';
 
-      // 3. Build properties list for this tenant
-      const properties = group.contracts.map(c => {
-        const safeCode = (c.contractCode || `${c.unitNumber}_${c.contractNumber || 'nocode'}`)
-          .toString()
-          .replace(/[\/\\#\s]/g, '_');
-        return {
-          buildingName: (c.buildingName || 'غير محدد').trim(),
-          unitNumber: (c.unitNumber || '').trim(),
-          unitType: (c.unitType || '').trim(),
-          contractCode: (c.contractCode || '').trim(),
-          contractNumber: c.contractNumber || null,
-          startDate: toCalendarIsoString(c.startDate),
-          endDate: toCalendarIsoString(c.endDate),
-          rentAmount: c.rentAmount || 0,
-          yearValue: c.yearValue || 0,
-          contractState: c.contractState || 'valid',
-        };
-      });
+      // 3. Build deduplicated physical properties list for this tenant (1 entry per Building + Unit)
+      // If a unit has both a 2026 contract and a 2027 renewed contract, keep the latest contract data
+      // so the unit is never duplicated in `apartmentId`, `properties`, or `rentAmount`.
+      const propertiesByUnitKey = new Map();
+      for (const c of group.contracts) {
+        const bName = (c.buildingName || 'غير محدد').trim();
+        const uNum = (c.unitNumber || '').trim();
+        const unitKey = `${bName.toLowerCase()}||${uNum.toLowerCase()}`;
+        const startIso = toCalendarIsoString(c.startDate);
+        const endIso = toCalendarIsoString(c.endDate);
+
+        if (!propertiesByUnitKey.has(unitKey)) {
+          // Since group.contracts is sorted by endDate DESC, this first entry is the newest/renewed contract
+          propertiesByUnitKey.set(unitKey, {
+            buildingName: bName,
+            unitNumber: uNum,
+            unitType: (c.unitType || '').trim(),
+            contractCode: (c.contractCode || '').trim(),
+            contractNumber: c.contractNumber || null,
+            startDate: startIso,
+            endDate: endIso,
+            rentAmount: c.rentAmount || 0,
+            yearValue: c.yearValue || 0,
+            contractState: c.contractState || 'valid',
+          });
+        }
+      }
+      const properties = [...propertiesByUnitKey.values()];
 
       // 4. In-Memory Lookup & Auth Sync (Priority: Phone -> Email -> Name if unclaimed)
       let uid;
@@ -462,25 +627,27 @@ async function runSync() {
         }
       }
 
-      let isNewUserCreated = false;
-
       try {
         if (existingUser) {
           uid = existingUser.uid;
           const needsUpdate = existingUser.displayName !== group.name ||
+                              (existingUser.email && existingUser.email.toLowerCase() !== emailKey) ||
                               (phoneKey && !existingUser.phoneNumber);
           if (needsUpdate && auth.getUser) {
             // ⚠️ لا نعيد تعيين كلمة المرور للحسابات الموجودة حتى لا نلغي كلمة المرور التي غيّرها المستأجر
             const updatePayload = {
-              displayName: group.name
+              displayName: group.name,
+              email: email
             };
             if (phoneKey && !existingUser.phoneNumber) {
               updatePayload.phoneNumber = phoneKey;
             }
             try {
               await auth.updateUser(uid, updatePayload);
+              existingUser.email = email;
+              userByEmail.set(emailKey, existingUser);
             } catch (upErr) {
-              // Ignore harmless phone conflict during update
+              // Ignore harmless phone/email conflict during update
             }
           }
           authExistingCount++;
@@ -496,7 +663,6 @@ async function runSync() {
             }
             const newUser = await auth.createUser(createPayload);
             uid = newUser.uid;
-            isNewUserCreated = true;
             if (phoneKey) userByPhone.set(phoneKey, newUser);
             userByEmail.set(emailKey, newUser);
             userByName.set(nameKey, newUser);
@@ -504,18 +670,34 @@ async function runSync() {
           } catch (createErr) {
             if (createErr.code === 'auth/email-already-exists') {
               const u = await auth.getUserByEmail(email);
-              if (!nonTenantUids.has(u.uid)) {
+              if (!protectedUids.has(u.uid) && !claimedUids.has(u.uid)) {
                 uid = u.uid;
                 userByEmail.set(emailKey, u);
                 userByName.set(nameKey, u);
                 authExistingCount++;
               } else {
-                const nameHash = crypto.createHash('sha256').update(group.key).digest('hex').substring(0, 16);
-                uid = `tenant_${nameHash}`;
+                // Email belongs to another tenant; create with fallback phone/hash email
+                const fallbackEmail = primaryMobile
+                  ? `${primaryMobile}@elitelivingre.ae`
+                  : `tenant_${crypto.createHash('sha256').update(group.key).digest('hex').substring(0, 16)}@elitelivingre.ae`;
+                email = fallbackEmail;
+                try {
+                  const newUser = await auth.createUser({
+                    email: fallbackEmail,
+                    password: defaultPassword,
+                    displayName: group.name,
+                    ...(phoneKey ? { phoneNumber: phoneKey } : {})
+                  });
+                  uid = newUser.uid;
+                  authCreatedCount++;
+                } catch (_) {
+                  const nameHash = crypto.createHash('sha256').update(group.key).digest('hex').substring(0, 16);
+                  uid = `tenant_${nameHash}`;
+                }
               }
             } else if (phoneKey && createErr.code === 'auth/phone-number-already-exists') {
               const u = await auth.getUserByPhoneNumber(phoneKey);
-              if (!nonTenantUids.has(u.uid)) {
+              if (!protectedUids.has(u.uid) && !claimedUids.has(u.uid)) {
                 uid = u.uid;
                 userByPhone.set(phoneKey, u);
                 userByName.set(nameKey, u);
@@ -538,13 +720,16 @@ async function runSync() {
       }
 
       claimedUids.set(uid, group.key);
+      activeTenantUids.add(uid);
 
-      // 5. Save each contract to `contracts` collection with tenantUid = uid
+      // 5. Save each active/renewed contract to `contracts` collection with tenantUid = uid
       for (const c of group.contracts) {
         const safeCode = (c.contractCode || `${c.unitNumber}_${c.contractNumber || 'nocode'}`)
           .toString()
           .replace(/[\/\\#\s]/g, '_');
         const contractDocId = primaryMobile ? `${primaryMobile}_${safeCode}` : `contract_${safeCode}`;
+        activeContractDocIds.add(contractDocId);
+
         const contractRef = db.collection('contracts').doc(contractDocId);
         const contractData = {
           contractCode: c.contractCode || '',
@@ -574,9 +759,11 @@ async function runSync() {
         for (const ch of contractCheques) {
           const safeChqNo = (ch.chequeNumber || 'nochq').toString().replace(/[\/\\#\s]/g, '_');
           const chequeDocId = `chq_${safeCode}_${safeChqNo}`;
-          const chequeRef = db.collection('cheques').doc(chequeDocId);
+          activeChequeDocIds.add(chequeDocId);
 
-          const isPaid = ch.isDeposited === true || ch.isDeposited === 1;
+          const chequeRef = db.collection('cheques').doc(chequeDocId);
+          const chequeStatus = ch.chequeStatus || (ch.isDeposited ? 'paid' : 'pending');
+          const effectiveNotes = [ch.notes, ch.notes2, ch.notes3].filter(n => n && String(n).trim().length > 0).join(' | ');
 
           const chequeData = {
             tenantUid: uid,
@@ -586,13 +773,13 @@ async function runSync() {
             amount: ch.amount || 0,
             dueDate: toMiddayTimestamp(ch.dueDate),
             date: toMiddayTimestamp(ch.date),
-            status: isPaid ? 'paid' : 'pending',
+            status: chequeStatus,
             depositDate: toMiddayTimestamp(ch.depositDate),
             contractCode: c.contractCode || '',
             contractNumber: c.contractNumber || null,
             buildingName: (c.buildingName || '').trim(),
             unitNumber: (c.unitNumber || '').trim(),
-            notes: ch.notes || null,
+            notes: effectiveNotes || null,
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
           };
           currentBatch.set(chequeRef, chequeData, { merge: true });
@@ -616,10 +803,11 @@ async function runSync() {
         }
       }
 
-      // 6. Save unified tenant User document in `users/{uid}`
+      // 6. Save unified tenant User document in `users/{uid}` (with deduplicated units/properties)
       const userRef = db.collection('users').doc(uid);
       const uniqueBuildings = [...new Set(properties.map(p => p.buildingName).filter(Boolean))];
-      const allApartments = properties.map(p => p.unitNumber).filter(Boolean);
+      const uniqueApartments = [...new Set(properties.map(p => p.unitNumber).filter(Boolean))];
+      const uniqueUnitTypes = [...new Set(properties.map(p => p.unitType).filter(Boolean))];
 
       // Check if user already changed their password or updated their phone in the app
       const existingFirestoreUser = firestoreDataByUid.get(uid);
@@ -641,15 +829,15 @@ async function runSync() {
         role: effectiveRole,
         mustChangePassword: mustChangePassword,
         properties: properties,
-        apartmentId: allApartments.join(', '),
+        apartmentId: uniqueApartments.join(', '),
         buildingId: uniqueBuildings.join(', '),
         contractStartDate: properties[0]?.startDate || null,
         contractEndDate: properties[0]?.endDate || null,
         contractCode: properties[0]?.contractCode || '',
         rentAmount: properties.reduce((sum, p) => sum + (p.rentAmount || 0), 0),
         yearValue: properties.reduce((sum, p) => sum + (p.yearValue || 0), 0),
-        unitType: properties.map(p => p.unitType).filter(Boolean).join(', '),
-        contractsCount: properties.length,
+        unitType: uniqueUnitTypes.join(', '),
+        contractsCount: group.contracts.length,
         ledgerBalance: Math.round(tenantLedgerBalance * 100) / 100,
         totalDebit: Math.round(tenantTotalDebit * 100) / 100,
         totalCredit: Math.round(tenantTotalCredit * 100) / 100,
@@ -661,12 +849,14 @@ async function runSync() {
 
       // 7. Register ALL tenant phone numbers into `phone_index`
       for (const m of validMobiles) {
+        activePhoneIndexIds.add(m);
         const phoneIndexRef = db.collection('phone_index').doc(m);
         currentBatch.set(phoneIndexRef, { email: email, uid: uid }, { merge: true });
         currentBatchOps++;
 
         if (m.startsWith('9715') && m.length === 12) {
           const localPhone = '05' + m.substring(4);
+          activePhoneIndexIds.add(localPhone);
           const localIndexRef = db.collection('phone_index').doc(localPhone);
           currentBatch.set(localIndexRef, { email: email, uid: uid }, { merge: true });
           currentBatchOps++;
@@ -677,16 +867,78 @@ async function runSync() {
       await commitBatchIfNeeded(false);
     }
 
+    // 8. Reconciliation & Clean-up Pass:
+    // Automatically remove old/terminated/replaced contracts, cheques, and inactive tenant profiles
+    // while strictly preserving all Demo data (`isDemo === true`), Admins, and Technicians.
+    let staleContractsRemoved = 0;
+    let staleChequesRemoved = 0;
+    let staleTenantsRemoved = 0;
+
+    if (processedCount >= 50) {
+      console.log('🧹 جاري فحص وتنظيف العقود والشيكات القديمة/المنتهية أو المكررة...');
+
+      // 8.1 Clean up stale contracts
+      const existingContractsSnap = await db.collection('contracts').get();
+      for (const doc of existingContractsSnap.docs) {
+        const data = doc.data();
+        if (data.isDemo === true) continue;
+        if (!activeContractDocIds.has(doc.id)) {
+          currentBatch.delete(doc.ref);
+          currentBatchOps++;
+          staleContractsRemoved++;
+          await commitBatchIfNeeded(false);
+        }
+      }
+
+      // 8.2 Clean up stale cheques
+      const existingChequesSnap = await db.collection('cheques').get();
+      for (const doc of existingChequesSnap.docs) {
+        const data = doc.data();
+        if (data.isDemo === true) continue;
+        if (!activeChequeDocIds.has(doc.id)) {
+          currentBatch.delete(doc.ref);
+          currentBatchOps++;
+          staleChequesRemoved++;
+          await commitBatchIfNeeded(false);
+        }
+      }
+
+      // 8.3 Clean up former/inactive tenant profiles & obsolete phone_index entries
+      for (const [docId, data] of firestoreDataByUid.entries()) {
+        if (protectedUids.has(docId)) continue; // Never touch admin, technician, or demo users
+        if (!activeTenantUids.has(docId)) {
+          currentBatch.delete(db.collection('users').doc(docId));
+          currentBatchOps++;
+          staleTenantsRemoved++;
+          await commitBatchIfNeeded(false);
+        }
+      }
+
+      const existingPhoneIndexSnap = await db.collection('phone_index').get();
+      for (const doc of existingPhoneIndexSnap.docs) {
+        const data = doc.data();
+        if (data.uid && protectedUids.has(data.uid)) continue;
+        if (!activePhoneIndexIds.has(doc.id) || (data.uid && !activeTenantUids.has(data.uid))) {
+          currentBatch.delete(doc.ref);
+          currentBatchOps++;
+          await commitBatchIfNeeded(false);
+        }
+      }
+    }
+
     // Commit any remaining operations
     await commitBatchIfNeeded(true);
     await Promise.all(batchPromises);
 
     console.log('========================================================');
     console.log('🎉 تمت المزامنة بنجاح تام!');
-    console.log(`✔️ إجمالي العقود المعالجة والمرفوعة: ${processedCount}`);
-    console.log(`💳 إجمالي الشيكات المعالجة والمرفوعة: ${chequesSyncedCount}`);
+    console.log(`✔️ إجمالي العقود النشطة المرفوعة والمحدثة: ${processedCount}`);
+    console.log(`💳 إجمالي الشيكات المرفوعة والمحدثة: ${chequesSyncedCount}`);
     console.log(`👤 حسابات مستأجرين جديدة تم إنشاؤها: ${authCreatedCount}`);
-    console.log(`🔄 حسابات مستأجرين تم تحديثها: ${authExistingCount}`);
+    console.log(`🔄 حسابات مستأجرين حالية تم تحديثها: ${authExistingCount}`);
+    console.log(`🧹 عقود قديمة/منتهية تم تنظيفها: ${staleContractsRemoved}`);
+    console.log(`🧹 شيكات قديمة/منتهية تم تنظيفها: ${staleChequesRemoved}`);
+    console.log(`🧹 حسابات مستأجرين منتهية تم تنظيفها: ${staleTenantsRemoved}`);
     console.log('========================================================');
 
   } catch (error) {
