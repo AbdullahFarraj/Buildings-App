@@ -1431,7 +1431,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
               ],
             ),
 
-            if (cheque.buildingName != null || cheque.unitNumber != null || (cheque.notes != null && cheque.notes!.isNotEmpty)) ...[
+            if (cheque.buildingName != null || cheque.unitNumber != null || (cheque.conciseNote != null && cheque.conciseNote!.isNotEmpty)) ...[
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1450,10 +1450,10 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                       ),
                       const SizedBox(width: 12),
                     ],
-                    if (cheque.notes != null && cheque.notes!.isNotEmpty)
+                    if (cheque.conciseNote != null && cheque.conciseNote!.isNotEmpty)
                       Expanded(
                         child: Text(
-                          '📝 ${cheque.notes!}',
+                          '📝 ${cheque.conciseNote!}',
                           style: const TextStyle(fontSize: 12, color: Colors.grey),
                           overflow: TextOverflow.ellipsis,
                         ),

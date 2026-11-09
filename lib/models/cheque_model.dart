@@ -75,6 +75,20 @@ class ChequeModel {
     return 'Pending';
   }
 
+  /// Returns a brief, user-friendly summary of what happened to the cheque,
+  /// stripping out any verbose auto-generated accounting text.
+  String? get conciseNote {
+    final raw = (notes ?? '').trim();
+    if (raw.isNotEmpty && !raw.toLowerCase().contains('cheque received from')) {
+      return raw;
+    }
+    if (isPaidCash) return 'Bounced - Settled in Cash';
+    if (isPaid) return 'Deposited & Cleared';
+    if (isBounced) return 'Returned from Bank';
+    if (isCancelled) return 'Replaced / Cancelled';
+    return null;
+  }
+
   factory ChequeModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>? ?? {};
 

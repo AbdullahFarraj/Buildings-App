@@ -632,9 +632,9 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                               ),
                             ],
                           ),
-                          if (c.notes != null && c.notes!.isNotEmpty) ...[
+                          if (c.conciseNote != null && c.conciseNote!.isNotEmpty) ...[
                             const SizedBox(height: 8),
-                            Text('Note: ${c.notes!}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                            Text('Status: ${c.conciseNote!}', style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500)),
                           ],
                         ],
                       ),

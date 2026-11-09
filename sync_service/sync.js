@@ -205,6 +205,7 @@ async function runSync() {
           v.YearValue                           AS yearValue,
           LTRIM(RTRIM(v.ContractState))         AS contractState,
           v.CustomerGuid                        AS customerGuid,
+          c.AcGuid                              AS customerAcGuid,
           v.Guid                                AS contractGuid
       FROM vwLeaseApartment v
       LEFT JOIN Customer c ON v.CustomerGuid = c.Guid
@@ -224,6 +225,7 @@ async function runSync() {
         SELECT 
           col.CheckGuid,
           MAX(CASE WHEN ISNULL(col.FixReturn, 0) = 1 OR ISNULL(col.Finished, 0) = 1 THEN 1 ELSE 0 END) AS hasFixReturn,
+          MAX(CASE WHEN col.Kind = 3 THEN 1 ELSE 0 END) AS hasColReturn,
           MAX(CASE WHEN 
                col.Note LIKE '%cash%' OR col.Note LIKE '%كاش%' OR col.Note LIKE '%نقد%' OR col.Note LIKE '%سداد%' OR col.Note LIKE '%تسديد%' OR col.Note LIKE '%بدل%' OR col.Note LIKE '%استبدال%' OR col.Note LIKE '%replace%' OR col.Note LIKE '%rplc%'
             OR col.ReturnCause LIKE '%cash%' OR col.ReturnCause LIKE '%كاش%' OR col.ReturnCause LIKE '%نقد%' OR col.ReturnCause LIKE '%سداد%' OR col.ReturnCause LIKE '%تسديد%' OR col.ReturnCause LIKE '%بدل%' OR col.ReturnCause LIKE '%استبدال%' OR col.ReturnCause LIKE '%replace%' OR col.ReturnCause LIKE '%rplc%'
@@ -255,33 +257,28 @@ async function runSync() {
           LTRIM(RTRIM(c.Note))           AS notes,
           LTRIM(RTRIM(c.Note2))          AS notes2,
           LTRIM(RTRIM(c.Note3))          AS notes3,
+          LTRIM(RTRIM(c.Note4))          AS notes4,
+          c.ObverseAccount               AS obverseAccount,
           LTRIM(RTRIM(lc.colNote))       AS colNote,
           LTRIM(RTRIM(lc.ReturnCause))   AS returnCause,
           LTRIM(RTRIM(lc.FixReturnNote)) AS fixReturnNote,
+          ISNULL(ca.hasFixReturn, 0)     AS hasFixReturn,
+          ISNULL(ca.hasColReturn, 0)     AS hasColReturn,
+          ISNULL(ca.hasCashNote, 0)      AS hasCashNote,
+          lc.Kind                        AS latestColKind,
           c.ContractGuid                 AS contractGuid,
           c.Deposition                   AS deposition,
           CASE 
-            -- 1. If settled with cash / replaced with cash / fixReturn or finished or has cash/settlement notes:
             WHEN ISNULL(ca.hasFixReturn, 0) = 1 OR ISNULL(ca.hasCashNote, 0) = 1
                  OR ISNULL(lc.FixReturn, 0) = 1 OR ISNULL(lc.Finished, 0) = 1 
-                 OR c.Note LIKE '%cash%' OR c.Note LIKE '%كاش%' OR c.Note LIKE '%نقد%' OR c.Note LIKE '%سداد%' OR c.Note LIKE '%تسديد%' OR c.Note LIKE '%بدل%'
-                 OR c.Note2 LIKE '%cash%' OR c.Note2 LIKE '%كاش%' OR c.Note2 LIKE '%نقد%' OR c.Note2 LIKE '%سداد%' OR c.Note2 LIKE '%تسديد%' OR c.Note2 LIKE '%بدل%'
-                 OR c.Note3 LIKE '%cash%' OR c.Note3 LIKE '%كاش%' OR c.Note3 LIKE '%نقد%' OR c.Note3 LIKE '%سداد%' OR c.Note3 LIKE '%تسديد%' OR c.Note3 LIKE '%بدل%'
                  OR lc.colNote LIKE '%cash%' OR lc.colNote LIKE '%كاش%' OR lc.colNote LIKE '%نقد%' OR lc.colNote LIKE '%سداد%' OR lc.colNote LIKE '%تسديد%' OR lc.colNote LIKE '%replace%' OR lc.colNote LIKE '%rplc%'
                  OR lc.ReturnCause LIKE '%cash%' OR lc.ReturnCause LIKE '%كاش%' OR lc.ReturnCause LIKE '%نقد%' OR lc.ReturnCause LIKE '%سداد%' OR lc.ReturnCause LIKE '%تسديد%' OR lc.ReturnCause LIKE '%replace%' OR lc.ReturnCause LIKE '%rplc%'
                  OR lc.FixReturnNote LIKE '%cash%' OR lc.FixReturnNote LIKE '%كاش%' OR lc.FixReturnNote LIKE '%نقد%' OR lc.FixReturnNote LIKE '%سداد%' OR lc.FixReturnNote LIKE '%تسديد%' OR lc.FixReturnNote LIKE '%replace%' OR lc.FixReturnNote LIKE '%rplc%'
               THEN 'paid_cash'
-            
-            -- 2. If latest action is Deposit (Kind = 1) or c.Deposition = 1 (and not returned):
-            -- Handles re-deposited cheques where latest action in ChecksCollection is Kind = 1
             WHEN lc.Kind = 1 OR (c.Deposition = 1 AND (lc.Kind IS NULL OR lc.Kind != 3))
               THEN 'paid'
-            
-            -- 3. If latest action is Return / Bounced (Kind = 3) and not re-deposited yet:
             WHEN lc.Kind = 3
               THEN 'bounced'
-            
-            -- 4. Otherwise: Pending
             ELSE 'pending'
           END                            AS chequeStatus,
           CASE 
@@ -300,6 +297,182 @@ async function runSync() {
     const chequesResult = await pool.request().query(chequesQuery);
     const chequesRows = chequesResult.recordset;
     console.log(`💳 تم استرجاع ${chequesRows.length} شيكاً من قاعدة البيانات.`);
+
+    console.log('⏳ جاري فحص قيود اليومية (Journal Entries) لتتبع إعادة الإيداع والسداد النقدي والتحويلات للشيكات...');
+    const journalQuery = `
+      SELECT 
+          h.Number             AS headerNum,
+          h.Date               AS entryDate,
+          d.AcGuid             AS acGuid,
+          d.ObverseAcGuid      AS obverseAcGuid,
+          d.Debit              AS debit,
+          d.Credit             AS credit,
+          LTRIM(RTRIM(d.Note)) AS note
+      FROM DEntry d
+      INNER JOIN HEntry h ON d.ParentGuid = h.Guid
+      WHERE h.Date >= '2025-01-01'
+        AND d.Note IS NOT NULL
+        AND (
+          d.Note LIKE '%Cheque%' OR d.Note LIKE '%CHQ%' OR d.Note LIKE '%RTC%' 
+          OR d.Note LIKE '%RTRN%' OR d.Note LIKE '%RTN%' OR d.Note LIKE '%DPST%' 
+          OR d.Note LIKE '%RPLC%' OR d.Note LIKE '%كاش%' OR d.Note LIKE '%شيك%'
+        );
+    `;
+    const journalResult = await pool.request().query(journalQuery);
+    const journalByChqNo = new Map();
+    const journalWithoutChqNo = [];
+    for (const jRow of journalResult.recordset) {
+      if (!jRow.note) continue;
+      const noteStr = String(jRow.note).trim();
+      const mNo = noteStr.match(/Cheque No\.\s*([0-9A-Za-z]+)/i) || noteStr.match(/CHQ\s*#?\s*([0-9]{2,})/i);
+      const item = {
+        date: jRow.entryDate ? new Date(jRow.entryDate).toISOString().substring(0, 10) : '',
+        rawDate: jRow.entryDate || null,
+        headerNum: Number(jRow.headerNum) || 0,
+        acGuid: jRow.acGuid ? String(jRow.acGuid).toLowerCase() : '',
+        obverseAcGuid: jRow.obverseAcGuid ? String(jRow.obverseAcGuid).toLowerCase() : '',
+        debit: Number(jRow.debit) || 0,
+        credit: Number(jRow.credit) || 0,
+        note: noteStr
+      };
+      if (mNo) {
+        const chqNoNorm = mNo[1].trim().replace(/^0+/, '') || '0';
+        if (!journalByChqNo.has(chqNoNorm)) journalByChqNo.set(chqNoNorm, []);
+        journalByChqNo.get(chqNoNorm).push(item);
+      } else {
+        journalWithoutChqNo.push(item);
+      }
+    }
+    console.log(`📑 تم تحليل ${journalResult.recordset.length} قيد يومية مرتبط بالشيكات.`);
+
+    function resolveChequeLifecycle(ch, tenantName, customerAcGuid) {
+      const chqNoNorm = String(ch.chequeNumber || '').trim().replace(/^0+/, '') || '0';
+      const candidates = journalByChqNo.get(chqNoNorm) || [];
+      const custNameUpper = String(tenantName || '').trim().toUpperCase();
+      const custAc = String(customerAcGuid || ch.obverseAccount || '').trim().toLowerCase();
+      const chqNoteCore = String(ch.notes || '').trim();
+      const val = Number(ch.amount) || 0;
+      const dueMs = ch.dueDate ? new Date(ch.dueDate).getTime() : 0;
+
+      const matched = candidates.filter(j => {
+        if (chqNoteCore && j.note.includes(chqNoteCore)) return true;
+        if (custAc && (j.acGuid === custAc || j.obverseAcGuid === custAc)) return true;
+        if (custNameUpper && j.note.toUpperCase().includes(custNameUpper)) return true;
+        return false;
+      });
+
+      // Fallback for long notes where Cheque No. at the end was truncated
+      if (dueMs > 0) {
+        for (const j of journalWithoutChqNo) {
+          const sameTenant = (custAc && (j.acGuid === custAc || j.obverseAcGuid === custAc)) ||
+                             (custNameUpper && j.note.toUpperCase().includes(custNameUpper));
+          if (!sameTenant) continue;
+          const sameAmt = Math.abs(j.debit - val) < 1 || Math.abs(j.credit - val) < 1;
+          if (!sameAmt) continue;
+          const jMs = j.rawDate ? new Date(j.rawDate).getTime() : 0;
+          const diffDays = (jMs - dueMs) / (1000 * 60 * 60 * 24);
+          if (diffDays >= -15 && diffDays <= 90) {
+            matched.push(j);
+          }
+        }
+      }
+
+      matched.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.headerNum - b.headerNum));
+
+      let hasDeposit = ch.latestColKind === 1 || ch.deposition === 1 || ch.deposition === true;
+      let hasReturn = ch.latestColKind === 3 || ch.hasColReturn === 1;
+      let hasRedeposit = ch.latestColKind === 1 && ch.hasColReturn === 1;
+      let hasCashSettle = ch.chequeStatus === 'paid_cash' || ch.hasFixReturn === 1 || ch.hasCashNote === 1;
+      let hasBankTrf = false;
+      let isCancelledOrReplaced = false;
+      let maxReturnDate = '';
+      let maxReturnNum = -1;
+      let maxDepDate = '';
+      let maxDepNum = -1;
+      let effectiveDepositDate = ch.depositDate || null;
+      let returnReasonText = '';
+
+      for (const j of matched) {
+        const idx = j.note.indexOf('Cheque received from');
+        const prefix = (idx > 0 ? j.note.substring(0, idx) : j.note).trim().toUpperCase();
+        if (!prefix || idx === 0) continue;
+
+        // Ignore penalty, VAT, and replacement fee lines
+        if (/^(5%\s*VAT|TAXABLE|TAXALBE|PENALT|5%\s*PENALT|CASH RCVD FOR (PENALTY|CHQ|EJARI|ADMIN)|CASH DPSTD FOR (PENALTY|CHQ|EJARI|ADMIN)|CASH RCVD\s*-\s*PENALTY|CASH DPSTD\s*-\s*PENALTY|CHQ RCVD FOR CHQ RTRN PENALTY|CHQ RPLCD CHARGES)/i.test(prefix)) {
+          continue;
+        }
+
+        const firstPart = prefix.split('-')[0].trim();
+
+        if (/^(CASH RCVD|CASH DPSTD|DPSTD-CASH RCVD|PARTIAL CASH|BALANCE CASH|BLC CASH|BALANCE DPSTD|CASH TFRD|FULL SETLMNT)/i.test(prefix)) {
+          hasCashSettle = true;
+          if (j.rawDate) effectiveDepositDate = j.rawDate;
+        } else if (/^(FUND TRF|FUN TRF|FUND RCVD|PARTIAL FUND|BALANCE FUND|BT\b|PARTIAL AMOUNT TRANSFER)/i.test(prefix)) {
+          hasBankTrf = true;
+          hasCashSettle = true;
+          if (j.rawDate) effectiveDepositDate = j.rawDate;
+        } else if (/REDPST|REDEPOSIT|RE-DPST/i.test(prefix)) {
+          hasRedeposit = true;
+          if (j.rawDate) effectiveDepositDate = j.rawDate;
+        } else if (/RPLC NEW CHQ|RPLC WITH NEW CHQ|RPLC CHQ \(|REPLACE 5 CHQS|RPLCED WITH NEW CHQ|EARLY VACAT|EALRY VACAT|DUE TO TERMINATION|GUARANTEE CANCLED/i.test(prefix)) {
+          isCancelledOrReplaced = true;
+        } else if (/^(CHQ DPSTD|CHQ DSPTD|CHQ DPTSD|CHQ DPTD|CHQ DPST|CHQ DPTS|DPSTD|DPSTED)$/i.test(firstPart) && !/RTRN|RTC|RTN/i.test(prefix)) {
+          hasDeposit = true;
+          if (j.rawDate) effectiveDepositDate = j.rawDate;
+          if (j.date > maxDepDate || (j.date === maxDepDate && j.headerNum > maxDepNum)) {
+            maxDepDate = j.date;
+            maxDepNum = j.headerNum;
+          }
+        } else if (/RTRN|RTC|RTN|XLD|CNCLD|RETURN/i.test(prefix)) {
+          hasReturn = true;
+          if (/INF/i.test(prefix)) returnReasonText = 'Returned - Insufficient Funds';
+          else if (/SIGN/i.test(prefix)) returnReasonText = 'Returned - Signature Mismatch';
+          else if (/CLOSED|FROZEN|BLOCKED/i.test(prefix)) returnReasonText = 'Returned - Account Closed';
+          else if (/TECH|ALTER/i.test(prefix)) returnReasonText = 'Returned - Technical Error';
+          if (j.date > maxReturnDate || (j.date === maxReturnDate && j.headerNum > maxReturnNum)) {
+            maxReturnDate = j.date;
+            maxReturnNum = j.headerNum;
+          }
+        }
+      }
+
+      if (maxReturnDate && maxDepDate && (maxDepDate > maxReturnDate || (maxDepDate === maxReturnDate && maxDepNum > maxReturnNum))) {
+        hasRedeposit = true;
+      }
+
+      const n34 = ((ch.notes3 || '') + ' ' + (ch.notes4 || '')).toUpperCase();
+      if (n34.includes('ALREADY TRANSFER')) {
+        hasBankTrf = true;
+        hasCashSettle = true;
+      }
+
+      let status = 'pending';
+      let conciseNote = null;
+
+      if (hasCashSettle) {
+        status = 'paid_cash';
+        conciseNote = hasBankTrf
+          ? (hasReturn ? 'Bounced - Settled via Bank Transfer' : 'Settled via Bank Transfer')
+          : (hasReturn ? 'Bounced - Settled in Cash' : 'Settled in Cash');
+      } else if (hasRedeposit) {
+        status = 'paid';
+        conciseNote = 'Bounced & Re-deposited (Cleared)';
+      } else if (isCancelledOrReplaced) {
+        status = 'cancelled';
+        conciseNote = 'Replaced / Cancelled';
+      } else if (hasReturn) {
+        status = 'bounced';
+        conciseNote = returnReasonText || 'Returned from Bank';
+      } else if (hasDeposit) {
+        status = 'paid';
+        conciseNote = 'Deposited & Cleared';
+      } else {
+        status = 'pending';
+        conciseNote = null;
+      }
+
+      return { status, conciseNote, depositDate: effectiveDepositDate };
+    }
 
     console.log('⏳ جاري استرجاع أرصدة المستأجرين من دفتر الأستاذ (General Ledger)...');
     const ledgerQuery = `
@@ -780,15 +953,7 @@ async function runSync() {
           activeChequeDocIds.add(chequeDocId);
 
           const chequeRef = db.collection('cheques').doc(chequeDocId);
-          const chequeStatus = ch.chequeStatus || (ch.isDeposited ? 'paid' : 'pending');
-          const effectiveNotes = [
-            ch.notes, 
-            ch.notes2, 
-            ch.notes3,
-            ch.returnCause ? `سبب الإرجاع: ${ch.returnCause}` : null,
-            ch.fixReturnNote ? `المعالجة: ${ch.fixReturnNote}` : null,
-            ch.colNote ? `ملاحظة التحصيل: ${ch.colNote}` : null
-          ].filter(n => n && String(n).trim().length > 0).join(' | ');
+          const lifecycle = resolveChequeLifecycle(ch, group.name, c.customerAcGuid);
 
           const chequeData = {
             tenantUid: uid,
@@ -798,13 +963,13 @@ async function runSync() {
             amount: ch.amount || 0,
             dueDate: toMiddayTimestamp(ch.dueDate),
             date: toMiddayTimestamp(ch.date),
-            status: chequeStatus,
-            depositDate: toMiddayTimestamp(ch.depositDate),
+            status: lifecycle.status,
+            depositDate: toMiddayTimestamp(lifecycle.depositDate),
             contractCode: c.contractCode || '',
             contractNumber: c.contractNumber || null,
             buildingName: (c.buildingName || '').trim(),
             unitNumber: (c.unitNumber || '').trim(),
-            notes: effectiveNotes || null,
+            notes: lifecycle.conciseNote || null,
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
           };
           currentBatch.set(chequeRef, chequeData, { merge: true });
