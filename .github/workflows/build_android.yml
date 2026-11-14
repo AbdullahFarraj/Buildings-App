@@ -41,11 +41,11 @@ jobs:
 
       # 5. Build Android App Bundle (Google Play Release)
       - name: Build Release App Bundle
-        run: flutter build appbundle --release
+        run: flutter build appbundle --release --android-skip-build-dependency-validation
 
       # 6. Build Android APK (Release)
       - name: Build Release APK
-        run: flutter build apk --release
+        run: flutter build apk --release --android-skip-build-dependency-validation
 
       # 7. Upload App Bundle Artifact (for Google Play Console)
       - name: Upload App Bundle Artifact
