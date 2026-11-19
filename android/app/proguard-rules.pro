@@ -1,6 +1,0 @@
--keep class io.flutter.** { *; }
--keep class com.google.firebase.** { *; }
--keep class com.google.android.gms.** { *; }
--dontwarn com.google.errorprone.annotations.**
--dontwarn javax.annotation.**
--dontwarn org.codehaus.mojo.animal_sniffer.**
