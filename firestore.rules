@@ -28,23 +28,49 @@ service cloud.firestore {
       return exists(userDocPath()) ? get(userDocPath()).data : {};
     }
 
-    function isAdmin() {
-      return isAuthenticated() && getUserData().get('role', '') == 'admin';
-    }
-
-    function isTechnician() {
-      return isAuthenticated() && getUserData().get('role', '') == 'technician';
+    function isDemoDoc(data) {
+      return data.get('isDemo', false) == true;
     }
 
     function isDemoUser() {
       return isAuthenticated() && (
         (request.auth.token.email != null && request.auth.token.email.matches('^demo\\..*')) ||
-        request.auth.token.get('isDemo', false) == true
+        request.auth.token.get('isDemo', false) == true ||
+        getUserData().get('isDemo', false) == true
       );
+    }
+
+    // عزل كامل: الأدمن الحقيقي لا يشمل حسابات الديمو، وأدمن الديمو مقيد ببيانات الديمو فقط
+    function isRealAdmin() {
+      return isAuthenticated() && getUserData().get('role', '') == 'admin' && !isDemoUser();
+    }
+
+    function isDemoAdmin() {
+      return isAuthenticated() && getUserData().get('role', '') == 'admin' && isDemoUser();
+    }
+
+    function isRealTechnician() {
+      return isAuthenticated() && getUserData().get('role', '') == 'technician' && !isDemoUser();
+    }
+
+    function isDemoTechnician() {
+      return isAuthenticated() && getUserData().get('role', '') == 'technician' && isDemoUser();
     }
 
     function changedKeys() {
       return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    function isSafeStorageUrl(url) {
+      return url is string && (
+        url.matches('^https://firebasestorage\\.googleapis\\.com/.*') ||
+        url.matches('^https://storage\\.googleapis\\.com/.*')
+      );
+    }
+
+    function isDemoChatOwner(chatId) {
+      return exists(/databases/$(database)/documents/users/$(chatId))
+          && get(/databases/$(database)/documents/users/$(chatId)).data.get('isDemo', false) == true;
     }
 
     // ==========================================
@@ -53,12 +79,12 @@ service cloud.firestore {
     match /phone_index/{phone} {
       // القراءة: مسموح جلب مستند واحد برقم معروف فقط (get)، ويُمنع سرد/تحميل كامل الفهرس (list)
       allow get: if true;
-      allow list: if isAdmin();
+      allow list: if isRealAdmin();
 
-      // الكتابة: للأدمن، أو لمستخدم مسجل يربط رقماً إماراتياً صحيحاً بإيميله ومعرفه هو فقط
-      // ولا يستطيع الكتابة فوق رقم مربوط مسبقاً بحساب شخص آخر
-      allow create: if isAdmin()
-                    || (isRegistered()
+      // الكتابة: للأدمن الحقيقي، أو لمستخدم حقيقي مسجل يربط رقماً إماراتياً صحيحاً بإيميله ومعرفه فقط
+      allow create: if isRealAdmin()
+                    || (!isDemoUser()
+                        && isRegistered()
                         && phone.matches('^(05[0-9]{8}|9715[0-9]{8}|\\+9715[0-9]{8})$')
                         && request.resource.data.keys().hasOnly(['email', 'uid'])
                         && 'email' in request.resource.data
@@ -66,17 +92,27 @@ service cloud.firestore {
                         && request.resource.data.email == request.auth.token.email
                         && request.resource.data.uid == request.auth.uid);
 
-      allow update: if isAdmin()
-                    || (isRegistered()
+      allow update: if isRealAdmin()
+                    || (!isDemoUser()
+                        && isRegistered()
                         && phone.matches('^(05[0-9]{8}|9715[0-9]{8}|\\+9715[0-9]{8})$')
                         && (resource.data.get('uid', '') == request.auth.uid || resource.data.email == request.auth.token.email)
                         && request.resource.data.email == request.auth.token.email
                         && request.resource.data.uid == request.auth.uid
-                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['email', 'uid']));
+                        && changedKeys().hasOnly(['email', 'uid']))
+                    || (isDemoUser()
+                        && isRegistered()
+                        && isDemoDoc(resource.data)
+                        && isDemoDoc(request.resource.data)
+                        && resource.data.get('uid', '') == request.auth.uid
+                        && request.resource.data.uid == request.auth.uid
+                        && request.resource.data.email == request.auth.token.email
+                        && changedKeys().hasOnly(['email', 'uid']));
 
-      // الحذف: للأدمن أو لصاحب الرقم نفسه عند تغيير رقمه
-      allow delete: if isAdmin()
-                    || (isRegistered()
+      // الحذف: للأدمن الحقيقي أو لصاحب الرقم الحقيقي نفسه عند تغيير رقمه (ممنوع على الديمو)
+      allow delete: if isRealAdmin()
+                    || (!isDemoUser()
+                        && isRegistered()
                         && (resource.data.get('uid', '') == request.auth.uid || resource.data.email == request.auth.token.email));
     }
 
@@ -86,56 +122,80 @@ service cloud.firestore {
     // ==========================================
     match /user_tokens/{userId} {
       allow read: if false;
-      allow write: if isOwner(userId) || isAdmin();
+      allow create, update: if (isOwner(userId) || isRealAdmin())
+                            && request.resource.data.keys().hasOnly(['fcmToken', 'updatedAt'])
+                            && request.resource.data.fcmToken is string
+                            && request.resource.data.fcmToken.size() > 0
+                            && request.resource.data.fcmToken.size() <= 512;
+      allow delete: if isOwner(userId) || isRealAdmin();
     }
 
     // ==========================================
     // 1. جدول المستخدمين (users)
     // ==========================================
     match /users/{userId} {
-      // القراءة الفردية (get):
-      // - صاحب الحساب يقرأ بياناته
-      // - الأدمن والفني يقرؤون مستند مستخدم محدد (الفني يحتاج رقم المستأجر للاتصال به في المهمة)
-      // - أي مستخدم مسجل يقرأ حسابات الإدارة والفنيين فقط
+      // القراءة الفردية (get): مع عزل صارم بين حسابات الديمو والحسابات الحقيقية
       allow get: if isOwner(userId)
-                 || isAdmin()
-                 || isTechnician()
-                 || (isRegistered() && (resource.data.role == 'admin' || resource.data.role == 'technician'));
+                 || isRealAdmin()
+                 || (isDemoAdmin() && isDemoDoc(resource.data))
+                 || (isRealTechnician() && resource.data.get('role', '') == 'tenant' && !isDemoDoc(resource.data))
+                 || (isDemoTechnician() && isDemoDoc(resource.data))
+                 || (!isDemoUser() && isRegistered() && (resource.data.get('role', '') == 'admin' || resource.data.get('role', '') == 'technician'))
+                 || (isDemoUser() && isRegistered() && isDemoDoc(resource.data) && (resource.data.get('role', '') == 'admin' || resource.data.get('role', '') == 'technician'));
 
       // القراءة الجماعية (list):
-      // - الأدمن فقط يسرد جميع المستخدمين (يُمنع الفني من سحب قائمة كل المستأجرين وبياناتهم)
-      // - أي مستخدم مسجل يسرد حسابات الإدارة والفنيين فقط
-      allow list: if isAdmin()
-                  || (isRegistered() && (resource.data.role == 'admin' || resource.data.role == 'technician'));
+      // - الأدمن الحقيقي يسرد كل المستخدمين
+      // - أدمن الديمو يسرد مستخدمي الديمو فقط (مع شرط isDemo == true)
+      // - المستخدمون المسجلون يسردون الإدارة والفنيين ضمن بيئتهم فقط
+      allow list: if isRealAdmin()
+                  || (isDemoAdmin() && resource.data.isDemo == true)
+                  || (!isDemoUser() && isRegistered() && (resource.data.role == 'admin' || resource.data.role == 'technician'))
+                  || (isDemoUser() && isRegistered() && resource.data.isDemo == true && (resource.data.role == 'admin' || resource.data.role == 'technician'));
 
-      // الإنشاء: صلاحية الإدارة فقط
-      allow create: if isAdmin();
+      // الإنشاء: صلاحية الأدمن الحقيقي فقط
+      allow create: if isRealAdmin();
 
-      // الحذف: الإدارة أو صاحب الحساب نفسه (يمنع الحذف نهائياً لحسابات الديمو لحماية النظام)
-      allow delete: if (isAdmin() || isOwner(userId)) && !isDemoUser();
+      // الحذف: الأدمن الحقيقي أو صاحب الحساب الحقيقي (ممنوع تماماً لحسابات الديمو)
+      allow delete: if (isRealAdmin() || isOwner(userId)) && !isDemoUser() && !isDemoDoc(resource.data);
 
       // التعديل:
-      // - الأدمن يعدل أي حساب
-      // - صاحب الحساب يعدل الحقول المسموحة فقط (Whitelist صارمة تمنع التلاعب بـ contractUrl أو role أو الإيجار)
-      // - المستأجر يحدث تقييم الفني بمعادلة رياضية محكومة (تقييم واحد بين 1 و 5 نجوم فقط)
-      allow update: if isAdmin()
+      // - الأدمن الحقيقي يعدل أي حساب
+      // - أدمن الديمو يعدل حقولاً محدودة على مستخدمي الديمو فقط
+      // - صاحب الحساب يعدل الحقول المسموحة فقط مع التحقق من الأنواع والحدود
+      // - تقييم الفني يُحسب من السيرفر فقط عبر Cloud Function (onTaskRated)
+      allow update: if isRealAdmin()
+                    || (isDemoAdmin()
+                        && isDemoDoc(resource.data)
+                        && isDemoDoc(request.resource.data)
+                        && changedKeys().hasOnly([
+                          'isDefaultTechnician', 'lastSeenRequestsAt',
+                          'fcmToken', 'fcmTokenUpdatedAt'
+                        ]))
                     || (isOwner(userId)
                         && changedKeys().hasOnly([
                           'name', 'phone', 'documents',
                           'fcmToken', 'fcmTokenUpdatedAt',
-                          'mustChangePassword', 'passwordChangedAt'
+                          'mustChangePassword', 'passwordChangedAt',
+                          'lastSeenRequestsAt', 'profileEditedAt'
                         ])
-                        && request.resource.data.get('mustChangePassword', false) == false)
-                    || (isRegistered()
-                        && !isOwner(userId)
-                        && resource.data.role == 'technician'
-                        && changedKeys().hasOnly(['averageRating', 'totalRatings'])
-                        && request.resource.data.totalRatings == resource.data.get('totalRatings', 0) + 1
-                        && request.resource.data.averageRating is number
-                        && request.resource.data.averageRating >= 1
-                        && request.resource.data.averageRating <= 5
-                        && (request.resource.data.averageRating * request.resource.data.totalRatings) >= (resource.data.get('averageRating', 0) * resource.data.get('totalRatings', 0)) + 0.99
-                        && (request.resource.data.averageRating * request.resource.data.totalRatings) <= (resource.data.get('averageRating', 0) * resource.data.get('totalRatings', 0)) + 5.01);
+                        && (!('mustChangePassword' in changedKeys())
+                            || (request.resource.data.get('mustChangePassword', false) == false
+                                && 'passwordChangedAt' in request.resource.data))
+                        && (!('documents' in changedKeys())
+                            || (!isDemoUser()
+                                && request.resource.data.documents is list
+                                && request.resource.data.documents.size() <= 30))
+                        && (!('name' in changedKeys())
+                            || (request.resource.data.name is string
+                                && request.resource.data.name.size() >= 1
+                                && request.resource.data.name.size() <= 150))
+                        && (!('phone' in changedKeys())
+                            || (request.resource.data.phone is string
+                                && request.resource.data.phone.size() <= 30))
+                        && (!('fcmToken' in changedKeys())
+                            || !('fcmToken' in request.resource.data)
+                            || (request.resource.data.fcmToken is string
+                                && request.resource.data.fcmToken.size() <= 512)));
     }
 
     // ==========================================
@@ -148,60 +208,107 @@ service cloud.firestore {
 
       function isTaskParticipant() {
         let t = taskData();
-        return isAuthenticated() && (t.tenantId == request.auth.uid || t.get('technicianId', '') == request.auth.uid);
+        return isAuthenticated()
+            && (t.tenantId == request.auth.uid || t.get('technicianId', '') == request.auth.uid)
+            && (isDemoUser() == isDemoDoc(t));
       }
 
       // القراءة:
-      // - الأدمن يرى كل الطلبات
-      // - المستأجر يرى طلباته
-      // - الفني يرى الطلبات المسندة إليه
-      allow read: if isAdmin()
+      // - الأدمن الحقيقي يرى كل الطلبات، وأدمن الديمو يرى طلبات الديمو فقط
+      // - المستأجر يرى طلباته، والفني يرى الطلبات المسندة إليه
+      allow read: if isRealAdmin()
+                  || (isDemoAdmin() && resource.data.isDemo == true)
                   || (isAuthenticated() && resource.data.tenantId == request.auth.uid)
                   || (isAuthenticated() && resource.data.get('technicianId', '') == request.auth.uid);
 
       // الإنشاء:
-      // - المستأجر ينشئ طلباً باسمه إما بحالة pending أو مع فني افتراضي مسند بحالة assigned
-      // - أو الأدمن
-      allow create: if isAdmin()
+      // - المستأجر ينشئ طلباً باسمه بحالة pending أو assigned، مع فرض وسم isDemo لمستخدمي الديمو ومنعه عن الحقيقيين
+      // - أو الأدمن الحقيقي
+      allow create: if isRealAdmin()
                     || (isRegistered()
                         && request.resource.data.tenantId == request.auth.uid
                         && request.resource.data.get('status', 'pending') in ['pending', 'assigned']
                         && request.resource.data.title is string
+                        && request.resource.data.title.size() > 0
                         && request.resource.data.title.size() <= 300
                         && request.resource.data.description is string
-                        && request.resource.data.description.size() <= 5000);
+                        && request.resource.data.description.size() <= 5000
+                        && (request.resource.data.get('photoUrls', null) == null
+                            || (request.resource.data.photoUrls is list
+                                && request.resource.data.photoUrls.size() <= 5))
+                        && (isDemoUser() ? isDemoDoc(request.resource.data) : !isDemoDoc(request.resource.data)));
 
       // التعديل:
-      // - الأدمن يعدل كل شيء
-      // - الفني يحدث حالة الطلب (إلى inProgress أو onHold أو waitingConfirmation) وإثبات الإنجاز وملاحظاته وسبب التعليق
-      // - المستأجر يؤكد الإنجاز (إلى completed فقط) ويضيف التقييم (1-5) والتعليق
-      allow update: if isAdmin()
+      // - الأدمن الحقيقي يعدل كل شيء
+      // - أدمن الديمو يعدل تعيين/رفض طلبات الديمو فقط
+      // - الفني يحدث حالة الطلب النشط فقط إلى inProgress أو onHold أو waitingConfirmation
+      // - المستأجر يؤكد الإنجاز فقط عندما تكون الحالة waitingConfirmation ويضع التقييم (1-5)
+      allow update: if isRealAdmin()
+                    || (isDemoAdmin()
+                        && isDemoDoc(resource.data)
+                        && isDemoDoc(request.resource.data)
+                        && changedKeys().hasOnly(['technicianId', 'technicianName', 'status', 'rejectionReason']))
                     || (isAuthenticated()
                         && resource.data.get('technicianId', '') == request.auth.uid
+                        && (isDemoUser() == isDemoDoc(resource.data))
+                        && resource.data.get('status', '') in ['assigned', 'inProgress', 'onHold']
                         && changedKeys().hasOnly(['status', 'completedAt', 'completionProofUrl', 'completionNotes', 'holdReason'])
-                        && request.resource.data.status in ['inProgress', 'waitingConfirmation', 'onHold'])
+                        && request.resource.data.status in ['inProgress', 'waitingConfirmation', 'onHold']
+                        && (!('completionProofUrl' in changedKeys())
+                            || request.resource.data.get('completionProofUrl', null) == null
+                            || isSafeStorageUrl(request.resource.data.completionProofUrl))
+                        && (!('completionNotes' in changedKeys())
+                            || request.resource.data.get('completionNotes', null) == null
+                            || (request.resource.data.completionNotes is string
+                                && request.resource.data.completionNotes.size() <= 2000))
+                        && (!('holdReason' in changedKeys())
+                            || request.resource.data.get('holdReason', null) == null
+                            || (request.resource.data.holdReason is string
+                                && request.resource.data.holdReason.size() <= 1000)))
                     || (isAuthenticated()
                         && resource.data.tenantId == request.auth.uid
+                        && (isDemoUser() == isDemoDoc(resource.data))
+                        && resource.data.get('status', '') == 'waitingConfirmation'
                         && changedKeys().hasOnly(['status', 'completedAt', 'rating', 'tenantFeedback'])
                         && request.resource.data.status == 'completed'
                         && (request.resource.data.get('rating', null) == null
                             || (request.resource.data.rating is number
                                 && request.resource.data.rating >= 1
-                                && request.resource.data.rating <= 5)));
+                                && request.resource.data.rating <= 5))
+                        && (request.resource.data.get('tenantFeedback', null) == null
+                            || (request.resource.data.tenantFeedback is string
+                                && request.resource.data.tenantFeedback.size() <= 2000)))
+                    || (isAuthenticated()
+                        && (resource.data.tenantId == request.auth.uid
+                            || resource.data.get('technicianId', '') == request.auth.uid
+                            || (isDemoAdmin() && isDemoDoc(resource.data)))
+                        && (isDemoUser() == isDemoDoc(resource.data))
+                        && resource.data.get('status', '') in ['pending', 'assigned', 'inProgress', 'onHold']
+                        && changedKeys().hasOnly(['preferredVisitDate', 'preferredVisitSlot', 'rescheduledBy', 'rescheduledAt'])
+                        && request.resource.data.preferredVisitDate is timestamp
+                        && request.resource.data.preferredVisitSlot is string
+                        && request.resource.data.preferredVisitSlot.size() > 0
+                        && request.resource.data.preferredVisitSlot.size() <= 100
+                        && request.resource.data.rescheduledBy in ['tenant', 'technician']);
 
-      // الحذف والإلغاء: ممنوع بالكامل للجميع
+      // الحذف: ممنوع بالكامل للجميع
       allow delete: if false;
 
       // محادثات ورسائل طلب الصيانة (task messages)
-      // - القراءة: الأدمن وأطراف الطلب فقط
-      // - الإرسال: باسم المرسل الحقيقي فقط (منع انتحال الهوية)
       match /messages/{messageId} {
-        allow read: if isAdmin() || isTaskParticipant();
-        allow create: if (isAdmin() || isTaskParticipant())
+        allow read: if isRealAdmin()
+                    || (isDemoAdmin() && isDemoDoc(taskData()))
+                    || isTaskParticipant();
+        allow create: if (isRealAdmin() || (isDemoAdmin() && isDemoDoc(taskData())) || isTaskParticipant())
                       && request.resource.data.senderId == request.auth.uid
                       && request.resource.data.text is string
-                      && request.resource.data.text.size() <= 4000;
-        allow update, delete: if isAdmin();
+                      && request.resource.data.text.size() <= 4000
+                      && (request.resource.data.get('fileUrl', null) == null
+                          || isSafeStorageUrl(request.resource.data.fileUrl))
+                      && (request.resource.data.get('fileName', null) == null
+                          || (request.resource.data.fileName is string
+                              && request.resource.data.fileName.size() <= 255));
+        allow update, delete: if isRealAdmin();
       }
     }
 
@@ -209,16 +316,41 @@ service cloud.firestore {
     // 3. جدول المحادثات المباشرة مع الإدارة (direct_chats)
     // ==========================================
     match /direct_chats/{chatId} {
-      // المحادثات المباشرة بين المستأجر (chatId == uid) والإدارة
-      allow read, write: if isAdmin() || isOwner(chatId);
+      // الأدمن الحقيقي يقرأ ويسرد كل المحادثات، أدمن الديمو يقرأ محادثات الديمو فقط، والمستأجر محادثته فقط
+      allow get: if isRealAdmin()
+                 || isOwner(chatId)
+                 || (isDemoAdmin() && isDemoChatOwner(chatId));
+      allow list: if isRealAdmin()
+                  || (isDemoAdmin() && resource.data.isDemo == true);
+
+      allow create, update: if (isRealAdmin()
+                                || (isOwner(chatId) && isRegistered())
+                                || (isDemoAdmin() && isDemoChatOwner(chatId)))
+                            && request.resource.data.keys().hasOnly(['lastMessageAt', 'lastMessage', 'lastSenderName', 'isDemo'])
+                            && (!('lastMessage' in request.resource.data)
+                                || (request.resource.data.lastMessage is string
+                                    && request.resource.data.lastMessage.size() <= 4000))
+                            && (!('lastSenderName' in request.resource.data)
+                                || (request.resource.data.lastSenderName is string
+                                    && request.resource.data.lastSenderName.size() <= 200));
+      allow delete: if isRealAdmin();
 
       match /messages/{messageId} {
-        allow read: if isAdmin() || isOwner(chatId);
-        allow create: if (isAdmin() || isOwner(chatId))
+        allow read: if isRealAdmin()
+                    || isOwner(chatId)
+                    || (isDemoAdmin() && isDemoChatOwner(chatId));
+        allow create: if (isRealAdmin()
+                          || (isOwner(chatId) && isRegistered())
+                          || (isDemoAdmin() && isDemoChatOwner(chatId)))
                       && request.resource.data.senderId == request.auth.uid
                       && request.resource.data.text is string
-                      && request.resource.data.text.size() <= 4000;
-        allow update, delete: if isAdmin();
+                      && request.resource.data.text.size() <= 4000
+                      && (request.resource.data.get('fileUrl', null) == null
+                          || isSafeStorageUrl(request.resource.data.fileUrl))
+                      && (request.resource.data.get('fileName', null) == null
+                          || (request.resource.data.fileName is string
+                              && request.resource.data.fileName.size() <= 255));
+        allow update, delete: if isRealAdmin();
       }
     }
 
@@ -226,58 +358,72 @@ service cloud.firestore {
     // 4. جدول الإشعارات (notifications)
     // ==========================================
     match /notifications/{notificationId} {
-      // القراءة: صاحب الإشعار فقط أو الأدمن
-      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      // القراءة: صاحب الإشعار أو الأدمن الحقيقي أو أدمن الديمو لإشعارات الديمو فقط
+      allow read: if isRealAdmin()
+                  || (isDemoAdmin() && resource.data.isDemo == true)
+                  || (isAuthenticated() && resource.data.userId == request.auth.uid);
 
       // الإنشاء:
-      // - مستخدم مسجل فعلياً في النظام فقط
-      // - منع انتحال هوية المرسل (senderId == request.auth.uid)
-      // - منع المستأجر من إرسال إشعارات وهمية لمستأجرين آخرين (المستأجر يراسل الإدارة أو الفني فقط)
+      // - عزل تام بين الديمو والحقيقي (إشعارات الديمو تقتصر على مستلمي الديمو بوسم isDemo: true)
+      // - منع انتحال الهوية ومنع إشعار المستأجرين لمستأجرين آخرين
       allow create: if isRegistered()
                     && request.resource.data.userId is string
                     && request.resource.data.userId != request.auth.uid
                     && request.resource.data.get('senderId', request.auth.uid) == request.auth.uid
                     && request.resource.data.get('isRead', false) == false
                     && request.resource.data.title is string
+                    && request.resource.data.title.size() > 0
                     && request.resource.data.title.size() <= 150
                     && request.resource.data.message is string
                     && request.resource.data.message.size() <= 1000
-                    && (isAdmin()
-                        || isTechnician()
-                        || (exists(/databases/$(database)/documents/users/$(request.resource.data.userId))
-                            && get(/databases/$(database)/documents/users/$(request.resource.data.userId)).data.get('role', '') in ['admin', 'technician']));
+                    && exists(/databases/$(database)/documents/users/$(request.resource.data.userId))
+                    && (
+                      (isDemoUser()
+                        && isDemoDoc(request.resource.data)
+                        && get(/databases/$(database)/documents/users/$(request.resource.data.userId)).data.get('isDemo', false) == true)
+                      || (!isDemoUser()
+                        && !isDemoDoc(request.resource.data)
+                        && get(/databases/$(database)/documents/users/$(request.resource.data.userId)).data.get('isDemo', false) != true
+                        && (isRealAdmin()
+                            || isRealTechnician()
+                            || get(/databases/$(database)/documents/users/$(request.resource.data.userId)).data.get('role', '') in ['admin', 'technician']))
+                    );
 
       // التعديل: صاحب الإشعار يغير حالة القراءة فقط
       allow update: if isAuthenticated()
                     && resource.data.userId == request.auth.uid
-                    && changedKeys().hasOnly(['isRead']);
+                    && changedKeys().hasOnly(['isRead'])
+                    && request.resource.data.isRead is bool;
 
-      // الحذف: الأدمن أو صاحب الإشعار
-      allow delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      // الحذف: الأدمن الحقيقي أو صاحب الإشعار الحقيقي
+      allow delete: if isRealAdmin()
+                    || (isAuthenticated() && resource.data.userId == request.auth.uid && !isDemoUser());
     }
 
     // ==========================================
     // 5. جدول العقود (contracts)
     // ==========================================
     match /contracts/{contractId} {
-      // القراءة: الأدمن يرى كل العقود، والمستأجر يرى عقوده المرتبطة بحسابه فقط
-      allow read: if isAdmin()
+      // القراءة: الأدمن الحقيقي يرى كل العقود، أدمن الديمو يرى عقود الديمو فقط، والمستأجر يرى عقوده فقط
+      allow read: if isRealAdmin()
+                  || (isDemoAdmin() && resource.data.isDemo == true)
                   || (isAuthenticated() && resource.data.tenantUid == request.auth.uid);
 
-      // التعديل والإنشاء والحذف: للإدارة الفعلية فقط (ممنوع على الديمو)
-      allow write: if isAdmin() && !isDemoUser();
+      // التعديل والإنشاء والحذف: للإدارة الحقيقية فقط (ممنوع تماماً على الديمو)
+      allow write: if isRealAdmin();
     }
 
     // ==========================================
     // 6. جدول الشيكات ومواعيد الدفع (cheques)
     // ==========================================
     match /cheques/{chequeId} {
-      // القراءة: الأدمن يرى كل الشيكات، والمستأجر يرى شيكاته هو فقط
-      allow read: if isAdmin()
+      // القراءة: الأدمن الحقيقي يرى كل الشيكات، أدمن الديمو يرى شيكات الديمو فقط، والمستأجر يرى شيكاته فقط
+      allow read: if isRealAdmin()
+                  || (isDemoAdmin() && resource.data.isDemo == true)
                   || (isAuthenticated() && resource.data.tenantUid == request.auth.uid);
 
-      // الإنشاء والتعديل والحذف: للإدارة الفعلية فقط (ممنوع على الديمو)
-      allow write: if isAdmin() && !isDemoUser();
+      // الإنشاء والتعديل والحذف: للإدارة الحقيقية فقط (ممنوع تماماً على الديمو)
+      allow write: if isRealAdmin();
     }
 
     // ==========================================
@@ -286,8 +432,15 @@ service cloud.firestore {
     match /app_settings/{settingId} {
       // القراءة: لجميع المستخدمين المسجلين (لقراءة الفني الافتراضي)
       allow read: if isAuthenticated();
-      // الكتابة: للإدارة فقط
-      allow write: if isAdmin();
+      // الكتابة: للإدارة الحقيقية فقط (ممنوع تماماً على الديمو)
+      allow write: if isRealAdmin();
+    }
+
+    // ==========================================
+    // 8. سجل الحسابات المحذوفة (deleted_accounts) - للاستخدام الداخلي للسيرفر والمزامنة فقط
+    // ==========================================
+    match /deleted_accounts/{docId} {
+      allow read, write: if false;
     }
   }
 }

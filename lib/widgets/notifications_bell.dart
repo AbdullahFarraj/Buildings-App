@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
 import '../services/notification_service.dart';
 import '../services/firestore_service.dart';
 import '../models/notification_model.dart';
 import '../core/theme/app_colors.dart';
-import 'package:intl/intl.dart';
 import '../views/shared/chat_sheet.dart';
 import '../views/tenant/tenant_alerts_view.dart';
 
@@ -40,7 +40,7 @@ class NotificationsBell extends StatelessWidget {
                   icon: const Icon(Icons.notifications_outlined),
                   tooltip: 'Notifications',
                   onPressed: () {
-                    _showNotificationsSheet(context, notifications, notificationService, user.uid);
+                    _showNotificationsSheet(context, notificationService, user.uid);
                   },
                 ),
                 if (unreadCount > 0)
@@ -72,25 +72,24 @@ class NotificationsBell extends StatelessWidget {
   }
 
   void _showNotificationsSheet(
-    BuildContext context, 
-    List<NotificationModel> notifications,
+    BuildContext rootContext,
     NotificationService service,
     String userId,
   ) {
     showModalBottomSheet(
-      context: context,
+      context: rootContext,
       isScrollControlled: true,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) {
+      builder: (sheetContext) {
         return DraggableScrollableSheet(
           expand: false,
           initialChildSize: 0.6,
           maxChildSize: 0.9,
           minChildSize: 0.4,
-          builder: (context, scrollController) {
+          builder: (_, scrollController) {
             return Column(
               children: [
                 Container(
@@ -119,22 +118,37 @@ class NotificationsBell extends StatelessWidget {
                   ),
                 ),
                 Expanded(
-                  child: notifications.isEmpty
-                      ? const Center(
+                  child: StreamBuilder<List<NotificationModel>>(
+                    stream: service.getUserNotifications(userId),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      final notifications = snapshot.data ?? [];
+                      if (notifications.isEmpty) {
+                        return const Center(
                           child: Text(
                             'No notifications yet.',
                             style: TextStyle(color: AppColors.textHint),
                           ),
-                        )
-                      : ListView.separated(
-                          controller: scrollController,
-                          itemCount: notifications.length,
-                          separatorBuilder: (context, index) => const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final notification = notifications[index];
-                            return _buildNotificationItem(context, notification, service);
-                          },
-                        ),
+                        );
+                      }
+                      return ListView.separated(
+                        controller: scrollController,
+                        itemCount: notifications.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (_, index) {
+                          final notification = notifications[index];
+                          return _buildNotificationItem(
+                            rootContext,
+                            sheetContext,
+                            notification,
+                            service,
+                          );
+                        },
+                      );
+                    },
+                  ),
                 ),
               ],
             );
@@ -144,68 +158,75 @@ class NotificationsBell extends StatelessWidget {
     );
   }
 
-  Widget _buildNotificationItem(BuildContext context, NotificationModel notification, NotificationService service) {
+  Widget _buildNotificationItem(
+    BuildContext rootContext,
+    BuildContext sheetContext,
+    NotificationModel notification,
+    NotificationService service,
+  ) {
     return InkWell(
       onTap: () async {
         if (!notification.isRead) {
           service.markAsRead(notification.id);
         }
-        
+
         final user = FirebaseAuth.instance.currentUser;
-        if (user != null) {
-          final userName = user.displayName ?? 'User';
-          final targetChatId = (notification.relatedTaskId != null && notification.relatedTaskId!.isNotEmpty)
-              ? notification.relatedTaskId!
-              : user.uid;
+        if (user == null) return;
 
-          final isChat = notification.title.contains('💬') || 
-                         notification.title.toLowerCase().contains('chat') ||
-                         notification.title.toLowerCase().contains('message');
+        final userName = user.displayName ?? 'User';
+        final targetChatId = (notification.relatedTaskId != null && notification.relatedTaskId!.isNotEmpty)
+            ? notification.relatedTaskId!
+            : user.uid;
 
-          // Close notifications bottom sheet first
-          Navigator.of(context).pop();
+        final isChat = notification.title.contains('💬') ||
+            notification.title.toLowerCase().contains('chat') ||
+            notification.title.toLowerCase().contains('message');
 
-          if (isChat) {
-            String chatTitle = 'Building Management';
-            if (notification.title.contains('-')) {
-              chatTitle = notification.title.split('-').last.replaceAll('💬', '').trim();
-            } else if (notification.title.contains('from')) {
-              chatTitle = notification.title.split('from').last.replaceAll('💬', '').trim();
-            }
+        // Close notifications bottom sheet first using sheetContext
+        if (sheetContext.mounted) {
+          Navigator.of(sheetContext).pop();
+        }
 
-            bool isDirect = true;
-            final List<String> receivers = [];
-            if (notification.relatedTaskId != null && 
-                notification.relatedTaskId!.isNotEmpty && 
-                notification.relatedTaskId != user.uid) {
-              final task = await FirestoreService().getTask(notification.relatedTaskId!);
-              if (task != null) {
-                isDirect = false;
-                chatTitle = 'Task: ${task.title}';
-                if (task.tenantId.isNotEmpty && task.tenantId != user.uid) {
-                  receivers.add(task.tenantId);
-                }
-                if (task.technicianId != null && task.technicianId != user.uid) {
-                  receivers.add(task.technicianId!);
-                }
+        if (isChat) {
+          String chatTitle = 'Building Management';
+          if (notification.title.contains('-')) {
+            chatTitle = notification.title.split('-').last.replaceAll('💬', '').trim();
+          } else if (notification.title.contains('from')) {
+            chatTitle = notification.title.split('from').last.replaceAll('💬', '').trim();
+          }
+
+          bool isDirect = true;
+          final List<String> receivers = [];
+          if (notification.relatedTaskId != null &&
+              notification.relatedTaskId!.isNotEmpty &&
+              notification.relatedTaskId != user.uid) {
+            final task = await FirestoreService().getTask(notification.relatedTaskId!);
+            if (task != null) {
+              isDirect = false;
+              chatTitle = 'Task: ${task.title}';
+              if (task.tenantId.isNotEmpty && task.tenantId != user.uid) {
+                receivers.add(task.tenantId);
+              }
+              if (task.technicianId != null && task.technicianId != user.uid) {
+                receivers.add(task.technicianId!);
               }
             }
-
-            if (!context.mounted) return;
-
-            ChatSheet.show(
-              context: context,
-              chatId: targetChatId,
-              chatTitle: chatTitle,
-              currentUserId: user.uid,
-              currentUserName: userName,
-              isDirectChat: isDirect,
-              receiverIds: receivers,
-            );
-          } else {
-            // General announcement, task update, or document notification
-            TenantAlertsView.openNotificationDetails(context, notification, service);
           }
+
+          if (!rootContext.mounted) return;
+
+          ChatSheet.show(
+            context: rootContext,
+            chatId: targetChatId,
+            chatTitle: chatTitle,
+            currentUserId: user.uid,
+            currentUserName: userName,
+            isDirectChat: isDirect,
+            receiverIds: receivers,
+          );
+        } else {
+          if (!rootContext.mounted) return;
+          TenantAlertsView.openNotificationDetails(rootContext, notification, service);
         }
       },
       child: Container(

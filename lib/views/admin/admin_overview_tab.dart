@@ -35,11 +35,12 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
   void initState() {
     super.initState();
     _loadData();
-    _tasksSub = widget.firestoreService.getAllTasksForAdmin(limit: 15).listen((tasksList) {
+    _tasksSub = widget.firestoreService.getAllTasksForAdmin(limit: 15).listen((tasksList) async {
+      final activeCount = await widget.firestoreService.getActiveTasksCount();
       if (mounted) {
         setState(() {
           _recentTasks = tasksList.take(5).toList();
-          _activeRequests = tasksList.where((t) => t.status != TaskStatus.completed).length;
+          _activeRequests = activeCount;
         });
       }
     });
@@ -456,7 +457,6 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
       case TaskStatus.waitingConfirmation: color = Colors.teal; break;
       case TaskStatus.completed: color = Colors.green; break;
       case TaskStatus.rejected: color = Colors.red; break;
-      default: color = Colors.grey;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -586,7 +586,10 @@ class _AdminOverviewTabState extends State<AdminOverviewTab> {
           },
         );
       },
-    );
+    ).whenComplete(() {
+      titleController.dispose();
+      messageController.dispose();
+    });
   }
 }
 

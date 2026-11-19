@@ -75,6 +75,21 @@ class FirestoreService {
 
   /// Gets a stream of tasks submitted by a specific tenant.
   Stream<List<MaintenanceTaskModel>> getTasksByTenant(String tenantId, {int limit = 50}) {
+    if (isCurrentSessionDemo) {
+      return _tasksCollection
+          .where('isDemo', isEqualTo: true)
+          .where('tenantId', isEqualTo: tenantId)
+          .limit(limit)
+          .snapshots()
+          .map((snapshot) {
+        final tasks = snapshot.docs.map((doc) {
+          return MaintenanceTaskModel.fromMap(
+              doc.data() as Map<String, dynamic>, doc.id);
+        }).toList();
+        tasks.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        return tasks;
+      });
+    }
     return _tasksCollection
         .where('tenantId', isEqualTo: tenantId)
         .orderBy('createdAt', descending: true)
@@ -349,9 +364,8 @@ class FirestoreService {
     }
   }
 
-  /// Submits tenant rating and updates technician's overall rating
+  /// Submits tenant rating (technician overall rating is updated server-side by onTaskRated Cloud Function)
   Future<void> submitTenantRating(String taskId, String technicianId, int rating, String? feedback) async {
-    // 1. Update Task (Always do this first to ensure status changes)
     await _tasksCollection.doc(taskId).update({
       'status': TaskStatus.completed.value,
       'rating': rating,
@@ -378,31 +392,6 @@ class FirestoreService {
         );
       }
     } catch (_) {}
-
-    // 2. Update Technician stats (Wrap in try-catch in case of permission issues)
-    try {
-      await _firestore.runTransaction((transaction) async {
-        final techRef = _firestore.collection('users').doc(technicianId);
-        final techDoc = await transaction.get(techRef);
-        
-        if (techDoc.exists && techDoc.data() != null) {
-          final data = techDoc.data()!;
-          final currentAverage = (data['averageRating'] as num?)?.toDouble() ?? 0.0;
-          final currentTotal = (data['totalRatings'] as num?)?.toInt() ?? 0;
-
-          final newTotal = currentTotal + 1;
-          final newAverage = ((currentAverage * currentTotal) + rating) / newTotal;
-
-          transaction.update(techRef, {
-            'averageRating': newAverage,
-            'totalRatings': newTotal,
-          });
-        }
-      });
-    } catch (e) {
-      debugPrint('Warning: Failed to update technician rating stats: $e');
-      // We don't rethrow because the task status was successfully updated.
-    }
   }
 
   /// Gets a list of all technicians
@@ -421,7 +410,7 @@ class FirestoreService {
         .get();
     
     return snapshot.docs
-        .where((doc) => (doc.data() as Map<String, dynamic>)['isDemo'] != true)
+        .where((doc) => doc.data()['isDemo'] != true)
         .map((doc) => UserModel.fromMap(doc.data(), doc.id))
         .toList();
   }
@@ -492,7 +481,7 @@ class FirestoreService {
         .get();
     
     return snapshot.docs
-        .where((doc) => (doc.data() as Map<String, dynamic>)['isDemo'] != true)
+        .where((doc) => doc.data()['isDemo'] != true)
         .map((doc) => UserModel.fromMap(doc.data(), doc.id))
         .toList();
   }
@@ -520,7 +509,7 @@ class FirestoreService {
     }
     final snapshot = await _firestore.collection('contracts').get();
     final list = snapshot.docs
-        .where((doc) => (doc.data() as Map<String, dynamic>)['isDemo'] != true)
+        .where((doc) => doc.data()['isDemo'] != true)
         .map((doc) => ContractModel.fromFirestore(doc))
         .toList();
     list.sort((a, b) {
@@ -531,28 +520,40 @@ class FirestoreService {
     return list;
   }
 
-  /// Gets active maintenance tasks count using fast & cheap aggregation (1 read total)
+  /// Gets active maintenance tasks count using fast & cheap aggregation
   Future<int> getActiveTasksCount() async {
+    const activeStatuses = [
+      'pending',
+      'assigned',
+      'inProgress',
+      'onHold',
+      'waitingConfirmation',
+    ];
     try {
       if (isCurrentSessionDemo) {
         final aggregate = await _tasksCollection
             .where('isDemo', isEqualTo: true)
-            .where('status', isNotEqualTo: TaskStatus.completed.value)
+            .where('status', whereIn: activeStatuses)
             .count()
             .get();
         return aggregate.count ?? 0;
       }
-      final snapshot = await _tasksCollection.get();
-      return snapshot.docs.where((doc) {
-        final data = doc.data() as Map<String, dynamic>;
-        return data['isDemo'] != true && data['status'] != TaskStatus.completed.value;
-      }).length;
+      final totalAggregate = await _tasksCollection
+          .where('status', whereIn: activeStatuses)
+          .count()
+          .get();
+      final demoAggregate = await _tasksCollection
+          .where('isDemo', isEqualTo: true)
+          .where('status', whereIn: activeStatuses)
+          .count()
+          .get();
+      return ((totalAggregate.count ?? 0) - (demoAggregate.count ?? 0)).clamp(0, 1000000);
     } catch (_) {
       return 0;
     }
   }
 
-  /// Gets total contracts count
+  /// Gets total contracts count using fast & cheap aggregation
   Future<int> getContractsCount() async {
     try {
       if (isCurrentSessionDemo) {
@@ -563,10 +564,13 @@ class FirestoreService {
             .get();
         return aggregate.count ?? 0;
       }
-      final snapshot = await _firestore.collection('contracts').get();
-      return snapshot.docs
-          .where((doc) => (doc.data() as Map<String, dynamic>)['isDemo'] != true)
-          .length;
+      final totalAggregate = await _firestore.collection('contracts').count().get();
+      final demoAggregate = await _firestore
+          .collection('contracts')
+          .where('isDemo', isEqualTo: true)
+          .count()
+          .get();
+      return ((totalAggregate.count ?? 0) - (demoAggregate.count ?? 0)).clamp(0, 1000000);
     } catch (_) {
       return 0;
     }
@@ -733,6 +737,7 @@ class FirestoreService {
       'lastMessageAt': FieldValue.serverTimestamp(),
       'lastMessage': text.isNotEmpty ? text : (fileName != null ? 'Attachment: $fileName' : 'New Message'),
       'lastSenderName': senderName,
+      if (isCurrentSessionDemo) 'isDemo': true,
     }, SetOptions(merge: true));
 
     // Send notifications to receivers
@@ -765,10 +770,12 @@ class FirestoreService {
 
   /// Stream of cheques for a specific tenant, sorted by due date
   Stream<List<ChequeModel>> getChequesByTenantStream(String tenantUid) {
-    return _chequesCollection
-        .where('tenantUid', isEqualTo: tenantUid)
-        .snapshots()
-        .map((snapshot) {
+    final Query query = isCurrentSessionDemo
+        ? _chequesCollection
+            .where('isDemo', isEqualTo: true)
+            .where('tenantUid', isEqualTo: tenantUid)
+        : _chequesCollection.where('tenantUid', isEqualTo: tenantUid);
+    return query.snapshots().map((snapshot) {
       final list = snapshot.docs.map((doc) => ChequeModel.fromFirestore(doc)).toList();
       list.sort((a, b) => a.dueDate.compareTo(b.dueDate));
       return list;
@@ -777,9 +784,12 @@ class FirestoreService {
 
   /// Future list of cheques for a specific tenant
   Future<List<ChequeModel>> getChequesByTenant(String tenantUid) async {
-    final snapshot = await _chequesCollection
-        .where('tenantUid', isEqualTo: tenantUid)
-        .get();
+    final Query query = isCurrentSessionDemo
+        ? _chequesCollection
+            .where('isDemo', isEqualTo: true)
+            .where('tenantUid', isEqualTo: tenantUid)
+        : _chequesCollection.where('tenantUid', isEqualTo: tenantUid);
+    final snapshot = await query.get();
     final list = snapshot.docs.map((doc) => ChequeModel.fromFirestore(doc)).toList();
     list.sort((a, b) => a.dueDate.compareTo(b.dueDate));
     return list;
@@ -787,10 +797,23 @@ class FirestoreService {
 
   /// Stream of all cheques (for Admin)
   Stream<List<ChequeModel>> getAllChequesStream() {
+    if (isCurrentSessionDemo) {
+      return _chequesCollection
+          .where('isDemo', isEqualTo: true)
+          .snapshots()
+          .map((snapshot) {
+        final list = snapshot.docs.map((doc) => ChequeModel.fromFirestore(doc)).toList();
+        list.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+        return list;
+      });
+    }
     return _chequesCollection
         .snapshots()
         .map((snapshot) {
-      final list = snapshot.docs.map((doc) => ChequeModel.fromFirestore(doc)).toList();
+      final list = snapshot.docs
+          .where((doc) => (doc.data() as Map<String, dynamic>)['isDemo'] != true)
+          .map((doc) => ChequeModel.fromFirestore(doc))
+          .toList();
       list.sort((a, b) => a.dueDate.compareTo(b.dueDate));
       return list;
     });
@@ -850,14 +873,23 @@ class FirestoreService {
           .collection('contracts')
           .where('isDemo', isEqualTo: true)
           .get();
-      return snapshot.docs.map((doc) => ContractModel.fromFirestore(doc)).toList();
+      final list = snapshot.docs
+          .map((doc) => ContractModel.fromFirestore(doc))
+          .where((c) => c.tenantUid == tenantUid)
+          .toList();
+      list.sort((a, b) {
+        if (a.endDate == null) return 1;
+        if (b.endDate == null) return -1;
+        return a.endDate!.compareTo(b.endDate!);
+      });
+      return list;
     }
     final snapshot = await _firestore
         .collection('contracts')
         .where('tenantUid', isEqualTo: tenantUid)
         .get();
     final list = snapshot.docs
-        .where((doc) => (doc.data() as Map<String, dynamic>)['isDemo'] != true)
+        .where((doc) => doc.data()['isDemo'] != true)
         .map((doc) => ContractModel.fromFirestore(doc))
         .toList();
     list.sort((a, b) {

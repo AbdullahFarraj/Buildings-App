@@ -4,6 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import '../../services/firestore_service.dart';
 import '../../models/user_model.dart';
 import '../../core/theme/app_colors.dart';
+import '../../utils/phone_helper.dart';
 
 class AdminTechniciansView extends StatefulWidget {
   const AdminTechniciansView({super.key});
@@ -43,6 +44,7 @@ class _AdminTechniciansViewState extends State<AdminTechniciansView> {
       });
       final technicians = await _firestoreService.getTechnicians();
       final defaultTech = await _firestoreService.getDefaultTechnician();
+      if (!mounted) return;
       setState(() {
         _allTenants = technicians;
         _filteredTenants = technicians;
@@ -50,6 +52,7 @@ class _AdminTechniciansViewState extends State<AdminTechniciansView> {
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -143,35 +146,11 @@ class _AdminTechniciansViewState extends State<AdminTechniciansView> {
 
                             if (technician.email != null && technician.email!.trim().isNotEmpty) {
                               final normalizedEmail = technician.email!.trim().toLowerCase();
-                              final oldCleaned = technician.phone.replaceAll(RegExp(r'[\s\-()]'), '');
-                              final cleaned = newPhone.replaceAll(RegExp(r'[\s\-()]'), '');
-                              final variants = <String>{cleaned};
-                              if (cleaned.startsWith('05') && cleaned.length == 10) {
-                                variants.add('971${cleaned.substring(1)}');
-                                variants.add('+971${cleaned.substring(1)}');
-                              } else if (cleaned.startsWith('9715') && cleaned.length == 12) {
-                                variants.add('0${cleaned.substring(3)}');
-                                variants.add('+$cleaned');
-                              } else if (cleaned.startsWith('+9715') && cleaned.length == 13) {
-                                variants.add('0${cleaned.substring(4)}');
-                                variants.add(cleaned.substring(1));
-                              }
-                              if (oldCleaned.isNotEmpty && oldCleaned != cleaned) {
-                                final oldVariants = <String>{oldCleaned};
-                                if (oldCleaned.startsWith('05') && oldCleaned.length == 10) {
-                                  oldVariants.add('971${oldCleaned.substring(1)}');
-                                  oldVariants.add('+971${oldCleaned.substring(1)}');
-                                } else if (oldCleaned.startsWith('9715') && oldCleaned.length == 12) {
-                                  oldVariants.add('0${oldCleaned.substring(3)}');
-                                  oldVariants.add('+$oldCleaned');
-                                } else if (oldCleaned.startsWith('+9715') && oldCleaned.length == 13) {
-                                  oldVariants.add('0${oldCleaned.substring(4)}');
-                                  oldVariants.add(oldCleaned.substring(1));
-                                }
-                                for (final ov in oldVariants) {
-                                  if (ov.isNotEmpty && !variants.contains(ov)) {
-                                    await FirebaseFirestore.instance.collection('phone_index').doc(ov).delete().catchError((_) {});
-                                  }
+                              final variants = PhoneHelper.getUaeVariants(newPhone);
+                              final oldVariants = PhoneHelper.getUaeVariants(technician.phone);
+                              for (final ov in oldVariants) {
+                                if (!variants.contains(ov)) {
+                                  await FirebaseFirestore.instance.collection('phone_index').doc(ov).delete().catchError((_) {});
                                 }
                               }
                               for (final v in variants) {
@@ -204,7 +183,10 @@ class _AdminTechniciansViewState extends State<AdminTechniciansView> {
           },
         );
       },
-    );
+    ).whenComplete(() {
+      nameController.dispose();
+      phoneController.dispose();
+    });
   }
 
   @override
@@ -625,7 +607,13 @@ class _CreateTechnicianSheetState extends State<CreateTechnicianSheet> {
               controller: _passwordController,
               obscureText: true,
               decoration: const InputDecoration(labelText: 'Password', prefixIcon: Icon(Icons.lock)),
-              validator: (v) => v == null || v.length < 6 ? 'Min 6 chars' : null,
+              validator: (v) {
+                if (v == null || v.length < 8) return 'Min 8 chars with letters and numbers';
+                if (!RegExp(r'[A-Za-z]').hasMatch(v) || !RegExp(r'\d').hasMatch(v)) {
+                  return 'Must include letters and numbers';
+                }
+                return null;
+              },
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(

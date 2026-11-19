@@ -14,6 +14,7 @@ import '../../models/user_model.dart';
 import '../../models/cheque_model.dart';
 import '../../core/theme/app_colors.dart';
 import '../../utils/contact_helper.dart';
+import '../../utils/phone_helper.dart';
 import '../shared/chat_sheet.dart';
 
 class TenantDashboardView extends StatefulWidget {
@@ -36,14 +37,21 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
     _userFuture = _firestoreService.getUser(widget.tenantId);
   }
 
-  Future<void> _launchUrl(String urlString) async {
-    final url = Uri.parse(urlString);
+  Future<void> _launchUrl(String? urlString) async {
+    if (!PhoneHelper.isSafeHttpsUrl(urlString)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid or unsafe link')));
+      }
+      return;
+    }
+    final url = Uri.tryParse(urlString!.trim());
+    if (url == null) return;
     try {
       final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
       if (!launched && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open link')));
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error opening link')));
       }
@@ -1021,7 +1029,9 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
                 : null,
             trailing: IconButton(
               icon: const Icon(Icons.download_rounded, color: AppColors.primary),
-              onPressed: () => _launchUrl(doc['url']!),
+              onPressed: doc['url'] != null && doc['url']!.isNotEmpty
+                  ? () => _launchUrl(doc['url'])
+                  : null,
             ),
           );
         },
@@ -1035,9 +1045,20 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
     );
     if (!mounted || platformFile == null) return;
-    final nameController = TextEditingController(text: platformFile.name);
 
-      final confirm = await showDialog<bool>(
+    final fileSize = platformFile.lengthSync() ?? await platformFile.length();
+    if (!mounted) return;
+    if (fileSize != null && fileSize > 25 * 1024 * 1024) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('File is too large. Maximum size is 25 MB.')),
+      );
+      return;
+    }
+
+    final nameController = TextEditingController(text: platformFile.name);
+    bool? confirm;
+    try {
+      confirm = await showDialog<bool>(
         context: context,
         builder: (ctx) => StatefulBuilder(
           builder: (context, setDialogState) {
@@ -1104,7 +1125,8 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
         ),
       );
 
-      if (confirm == true && nameController.text.trim().isNotEmpty) {
+      final docTitle = nameController.text.trim();
+      if (confirm == true && docTitle.isNotEmpty) {
         setState(() => _isUploadingDoc = true);
         try {
           final ext = (platformFile.extension ?? 'pdf').toLowerCase();
@@ -1142,7 +1164,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
 
           final currentDocs = List<Map<String, String>>.from(user.documents ?? []);
           currentDocs.add({
-            'name': nameController.text.trim(),
+            'name': docTitle,
             'url': downloadUrl,
             'uploadedAt': DateTime.now().toIso8601String(),
           });
@@ -1152,7 +1174,7 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
           // Notify Admins
           await NotificationService().notifyAdmins(
             title: 'New Tenant Document 📄',
-            message: '${user.name} (Apt ${user.apartmentId ?? 'N/A'}) uploaded: ${nameController.text.trim()}',
+            message: '${user.name} (Apt ${user.apartmentId ?? 'N/A'}) uploaded: $docTitle',
             relatedTaskId: user.uid,
           );
 
@@ -1176,7 +1198,10 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
           }
         }
       }
+    } finally {
+      nameController.dispose();
     }
+  }
 
   Widget _buildTenantProfileCard(UserModel user) {
     final phoneTrimmed = user.phone.trim();
@@ -1305,191 +1330,178 @@ class _TenantDashboardViewState extends State<TenantDashboardView> {
     );
   }
 
-  void _showEditPhoneDialog(UserModel user) {
+  Future<void> _showEditPhoneDialog(UserModel user) async {
     final phoneController = TextEditingController(text: user.phone);
     String? errorMessage;
     bool isSaving = false;
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogCtx) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogCtx) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                title: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.phone_android, color: AppColors.primary),
                     ),
-                    child: const Icon(Icons.phone_android, color: AppColors.primary),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      user.phone.trim().isEmpty ? 'Add Phone Number' : 'Update Phone Number',
-                      style: const TextStyle(fontSize: 18),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        user.phone.trim().isEmpty ? 'Add Phone Number' : 'Update Phone Number',
+                        style: const TextStyle(fontSize: 18),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Enter your UAE mobile number (e.g., 05xxxxxxxx or 9715xxxxxxxx). This phone will be linked to your account for fast mobile login.',
-                    style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: phoneController,
-                    keyboardType: TextInputType.phone,
-                    decoration: InputDecoration(
-                      labelText: 'UAE Mobile Number',
-                      hintText: '05xxxxxxxx or 9715xxxxxxxx',
-                      prefixIcon: const Icon(Icons.dialpad),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      errorText: errorMessage,
-                    ),
-                  ),
-                  if (isSaving) ...[
-                    const SizedBox(height: 16),
-                    const Center(child: CircularProgressIndicator()),
                   ],
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isSaving ? null : () => Navigator.pop(dialogCtx),
-                  child: const Text('Cancel'),
                 ),
-                ElevatedButton(
-                  onPressed: isSaving
-                      ? null
-                      : () async {
-                          final raw = phoneController.text.trim();
-                          final digits = raw.replaceAll(RegExp(r'\D'), '');
-
-                          String sanitized = '';
-                          if (digits.startsWith('05') && digits.length == 10) {
-                            sanitized = '971${digits.substring(1)}';
-                          } else if (digits.startsWith('5') && digits.length == 9) {
-                            sanitized = '971$digits';
-                          } else if (digits.startsWith('9715') && digits.length == 12) {
-                            sanitized = digits;
-                          } else if (digits.startsWith('009715') && digits.length == 14) {
-                            sanitized = digits.substring(2);
-                          } else {
-                            setDialogState(() {
-                              errorMessage =
-                                  'Invalid UAE number. Must start with 05 (10 digits) or 9715 (12 digits).';
-                            });
-                            return;
-                          }
-
-                          setDialogState(() {
-                            isSaving = true;
-                            errorMessage = null;
-                          });
-
-                          try {
-                            final authEmail = (FirebaseAuth.instance.currentUser?.email ?? user.email ?? '').trim().toLowerCase();
-
-                            // 1. Check if phone number is already claimed by another user
-                            final existingIndex = await FirebaseFirestore.instance
-                                .collection('phone_index')
-                                .doc(sanitized)
-                                .get();
-                            if (existingIndex.exists) {
-                              final data = existingIndex.data() ?? {};
-                              final ownerUid = data['uid']?.toString();
-                              final ownerEmail = data['email']?.toString().toLowerCase();
-                              if ((ownerUid != null && ownerUid.isNotEmpty && ownerUid != user.uid) ||
-                                  (ownerUid == null && ownerEmail != null && ownerEmail != authEmail)) {
-                                setDialogState(() {
-                                  isSaving = false;
-                                  errorMessage = 'This phone number is already linked to another account.';
-                                });
-                                return;
-                              }
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Enter your UAE mobile number (e.g., 05xxxxxxxx or 9715xxxxxxxx). This phone will be linked to your account for fast mobile login.',
+                      style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: phoneController,
+                      keyboardType: TextInputType.phone,
+                      decoration: InputDecoration(
+                        labelText: 'UAE Mobile Number',
+                        hintText: '05xxxxxxxx or 9715xxxxxxxx',
+                        prefixIcon: const Icon(Icons.dialpad),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        errorText: errorMessage,
+                      ),
+                    ),
+                    if (isSaving) ...[
+                      const SizedBox(height: 16),
+                      const Center(child: CircularProgressIndicator()),
+                    ],
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: isSaving ? null : () => Navigator.pop(dialogCtx),
+                    child: const Text('Cancel'),
+                  ),
+                  ElevatedButton(
+                    onPressed: isSaving
+                        ? null
+                        : () async {
+                            final sanitized = PhoneHelper.normalizeUaeMobile(phoneController.text.trim());
+                            if (sanitized == null) {
+                              setDialogState(() {
+                                errorMessage =
+                                    'Invalid UAE number. Must start with 05 (10 digits) or 9715 (12 digits).';
+                              });
+                              return;
                             }
 
-                            // 2. Update phone_index mappings first so login works immediately
-                            if (authEmail.isNotEmpty) {
-                              final oldDigits = user.phone.replaceAll(RegExp(r'\D'), '');
-                              if (oldDigits.isNotEmpty && oldDigits != sanitized) {
-                                final oldVariants = <String>{oldDigits};
-                                if (oldDigits.startsWith('9715') && oldDigits.length == 12) {
-                                  oldVariants.add('05${oldDigits.substring(4)}');
-                                } else if (oldDigits.startsWith('05') && oldDigits.length == 10) {
-                                  oldVariants.add('971${oldDigits.substring(1)}');
+                            setDialogState(() {
+                              isSaving = true;
+                              errorMessage = null;
+                            });
+
+                            try {
+                              final authEmail = (FirebaseAuth.instance.currentUser?.email ?? user.email ?? '').trim().toLowerCase();
+
+                              if (!_firestoreService.isCurrentSessionDemo) {
+                                // 1. Check if phone number is already claimed by another user
+                                final existingIndex = await FirebaseFirestore.instance
+                                    .collection('phone_index')
+                                    .doc(sanitized)
+                                    .get();
+                                if (existingIndex.exists) {
+                                  final data = existingIndex.data() ?? {};
+                                  final ownerUid = data['uid']?.toString();
+                                  final ownerEmail = data['email']?.toString().toLowerCase();
+                                  if ((ownerUid != null && ownerUid.isNotEmpty && ownerUid != user.uid) ||
+                                      (ownerUid == null && ownerEmail != null && ownerEmail != authEmail)) {
+                                    setDialogState(() {
+                                      isSaving = false;
+                                      errorMessage = 'This phone number is already linked to another account.';
+                                    });
+                                    return;
+                                  }
                                 }
-                                for (final ov in oldVariants) {
-                                  if (ov != sanitized && ov != '05${sanitized.substring(4)}') {
-                                    await FirebaseFirestore.instance.collection('phone_index').doc(ov).delete().catchError((_) {});
+
+                                // 2. Update phone_index mappings first so login works immediately
+                                if (authEmail.isNotEmpty) {
+                                  final newVariants = PhoneHelper.getUaeVariants(sanitized);
+                                  final oldVariants = PhoneHelper.getUaeVariants(user.phone);
+                                  for (final ov in oldVariants) {
+                                    if (!newVariants.contains(ov)) {
+                                      await FirebaseFirestore.instance.collection('phone_index').doc(ov).delete().catchError((_) {});
+                                    }
+                                  }
+
+                                  await FirebaseFirestore.instance
+                                      .collection('phone_index')
+                                      .doc(sanitized)
+                                      .set({'email': authEmail, 'uid': user.uid}, SetOptions(merge: true));
+
+                                  final localPhone = PhoneHelper.toLocalUaeFormat(sanitized);
+                                  if (localPhone != null) {
+                                    await FirebaseFirestore.instance
+                                        .collection('phone_index')
+                                        .doc(localPhone)
+                                        .set({'email': authEmail, 'uid': user.uid}, SetOptions(merge: true));
                                   }
                                 }
                               }
 
+                              // 3. Update user document in Firestore
                               await FirebaseFirestore.instance
-                                  .collection('phone_index')
-                                  .doc(sanitized)
-                                  .set({'email': authEmail, 'uid': user.uid}, SetOptions(merge: true));
+                                  .collection('users')
+                                  .doc(user.uid)
+                                  .update({'phone': sanitized});
 
-                              final localPhone = '05${sanitized.substring(4)}';
-                              await FirebaseFirestore.instance
-                                  .collection('phone_index')
-                                  .doc(localPhone)
-                                  .set({'email': authEmail, 'uid': user.uid}, SetOptions(merge: true));
-                            }
-
-                            // 3. Update user document in Firestore
-                            await FirebaseFirestore.instance
-                                .collection('users')
-                                .doc(user.uid)
-                                .update({'phone': sanitized});
-
-                            // Note: contract documents are admin-managed (synced from SQL Server)
-                            // and must not be modified by tenants.
-
-                            if (dialogCtx.mounted) {
-                              Navigator.pop(dialogCtx);
-                            }
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  backgroundColor: Colors.green.shade700,
-                                  content: Text('Phone number updated successfully to $sanitized!'),
-                                ),
-                              );
-                              setState(() {
-                                _userFuture = _firestoreService.getUser(widget.tenantId);
+                              if (dialogCtx.mounted) {
+                                Navigator.pop(dialogCtx);
+                              }
+                              if (mounted) {
+                                ScaffoldMessenger.of(this.context).showSnackBar(
+                                  SnackBar(
+                                    backgroundColor: Colors.green.shade700,
+                                    content: Text('Phone number updated successfully to $sanitized!'),
+                                  ),
+                                );
+                                setState(() {
+                                  _userFuture = _firestoreService.getUser(widget.tenantId);
+                                });
+                              }
+                            } catch (e) {
+                              setDialogState(() {
+                                isSaving = false;
+                                errorMessage = 'Error saving phone number: $e';
                               });
                             }
-                          } catch (e) {
-                            setDialogState(() {
-                              isSaving = false;
-                              errorMessage = 'Error saving phone number: $e';
-                            });
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: const Text('Save'),
                   ),
-                  child: const Text('Save'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+                ],
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      phoneController.dispose();
+    }
   }
 }

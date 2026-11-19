@@ -8,7 +8,6 @@ import '../../models/notification_model.dart';
 import '../../models/maintenance_task_model.dart';
 import '../../models/user_model.dart';
 import '../../widgets/skeleton_loader.dart';
-import '../../widgets/status_badge.dart';
 import '../../core/enums/task_status.dart';
 import '../../core/enums/user_role.dart';
 import '../../core/theme/app_colors.dart';
@@ -17,7 +16,6 @@ import 'package:image_picker/image_picker.dart';
 import '../../services/storage_service.dart';
 import '../../widgets/notifications_bell.dart';
 import '../../widgets/app_notification_toast.dart';
-import '../../widgets/task_photos_widget.dart';
 import '../../widgets/maintenance_task_card.dart';
 import 'tenant_profile_view.dart';
 import 'tenant_alerts_view.dart';
@@ -112,94 +110,99 @@ class _TenantHomeViewState extends State<TenantHomeView> {
     );
   }
 
-  void _showRatingDialog(MaintenanceTaskModel task) {
+  Future<void> _showRatingDialog(MaintenanceTaskModel task) async {
     int rating = 5;
     final feedbackController = TextEditingController();
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Confirm Completion'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Please rate the technician\'s work:'),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(5, (index) {
-                      return IconButton(
-                        icon: Icon(
-                          index < rating ? Icons.star : Icons.star_border,
-                          color: Colors.amber,
-                          size: 32,
-                        ),
-                        onPressed: () {
-                          setDialogState(() {
-                            rating = index + 1;
-                          });
-                        },
-                      );
-                    }),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: feedbackController,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: 'Feedback (Optional)',
-                      border: OutlineInputBorder(),
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogCtx) {
+          return StatefulBuilder(
+            builder: (dialogInnerCtx, setDialogState) {
+              return AlertDialog(
+                title: const Text('Confirm Completion'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Please rate the technician\'s work:'),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(5, (index) {
+                        return IconButton(
+                          icon: Icon(
+                            index < rating ? Icons.star : Icons.star_border,
+                            color: Colors.amber,
+                            size: 32,
+                          ),
+                          onPressed: () {
+                            setDialogState(() {
+                              rating = index + 1;
+                            });
+                          },
+                        );
+                      }),
                     ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: feedbackController,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Feedback (Optional)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogCtx),
+                    child: const Text('Cancel'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () async {
+                      final feedbackText = feedbackController.text.trim();
+                      Navigator.pop(dialogCtx);
+                      try {
+                        if (task.technicianId != null) {
+                          await _firestoreService.submitTenantRating(
+                            task.id,
+                            task.technicianId!,
+                            rating,
+                            feedbackText.isEmpty ? null : feedbackText,
+                          );
+                        } else {
+                          await _firestoreService.updateTaskStatus(task.id, TaskStatus.completed);
+                        }
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Thank you for your feedback!')),
+                          );
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error: $e'),
+                              backgroundColor: Colors.red,
+                              duration: const Duration(seconds: 5),
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    child: const Text('Submit'),
                   ),
                 ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    Navigator.pop(context); // close dialog
-                    try {
-                      if (task.technicianId != null) {
-                        await _firestoreService.submitTenantRating(
-                          task.id,
-                          task.technicianId!,
-                          rating,
-                          feedbackController.text.trim().isEmpty ? null : feedbackController.text.trim(),
-                        );
-                      } else {
-                        await _firestoreService.updateTaskStatus(task.id, TaskStatus.completed);
-                      }
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Thank you for your feedback!')),
-                        );
-                      }
-                    } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Error: $e'),
-                            backgroundColor: Colors.red,
-                            duration: const Duration(seconds: 5),
-                          ),
-                        );
-                      }
-                    }
-                  },
-                  child: const Text('Submit'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      feedbackController.dispose();
+    }
   }
 
   Widget _buildRequestsView() {
@@ -609,11 +612,20 @@ class _CreateRequestFormSheetState extends State<CreateRequestFormSheet> {
             InkWell(
               onTap: () async {
                 final now = DateTime.now();
+                final today = DateTime(now.year, now.month, now.day);
+                DateTime defaultDate = today.add(const Duration(days: 1));
+                if (defaultDate.weekday == DateTime.friday) {
+                  defaultDate = defaultDate.add(const Duration(days: 1));
+                }
+                DateTime initial = _selectedDate ?? defaultDate;
+                if (initial.isBefore(today) || initial.weekday == DateTime.friday) {
+                  initial = defaultDate;
+                }
                 final picked = await showDatePicker(
                   context: context,
-                  initialDate: _selectedDate ?? now.add(const Duration(days: 1)),
-                  firstDate: now,
-                  lastDate: now.add(const Duration(days: 14)),
+                  initialDate: initial,
+                  firstDate: today,
+                  lastDate: today.add(const Duration(days: 14)),
                   selectableDayPredicate: (date) {
                     return date.weekday != DateTime.friday;
                   },

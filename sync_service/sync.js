@@ -597,6 +597,24 @@ async function runSync() {
     }
     console.log(`👤 تم العثور على ${allUsersResult.users.length} حساب Auth و ${firestoreUsersSnap.size} مستخدم في Firestore.`);
 
+    // Load user-requested account deletions (deleted_accounts) so sync never re-creates opted-out users
+    const deletedEmails = new Set();
+    const deletedPhones = new Set();
+    const deletedAccountsSnap = await db.collection('deleted_accounts').get();
+    for (const dDoc of deletedAccountsSnap.docs) {
+      const dData = dDoc.data() || {};
+      if (dData.email) deletedEmails.add(String(dData.email).trim().toLowerCase());
+      if (Array.isArray(dData.phones)) {
+        for (const ph of dData.phones) {
+          const san = sanitizeUaeMobile(ph);
+          if (san) deletedPhones.add(san);
+        }
+      }
+    }
+    if (deletedAccountsSnap.size > 0) {
+      console.log(`🛡️ تم تحميل ${deletedAccountsSnap.size} سجل لحسابات محذوفة بناءً على طلب أصحابها (سيتم استثناؤها من المزامنة).`);
+    }
+
     let processedCount = 0;
     let chequesSyncedCount = 0;
     let authCreatedCount = 0;
@@ -765,6 +783,12 @@ async function runSync() {
 
       // Default password: phone if available, else Elite@123456
       const defaultPassword = primaryMobile || 'Elite@123456';
+
+      // Respect user-initiated account deletion: skip if email or any phone belongs to deleted_accounts
+      if (deletedEmails.has(email.toLowerCase()) || validMobiles.some(m => deletedPhones.has(m))) {
+        console.log(`⏭️ تخطي المستأجر (${group.name}) لأنه قام بحذف حسابه مسبقاً.`);
+        continue;
+      }
 
       // 3. Build deduplicated physical properties list for this tenant (1 entry per Building + Unit)
       // If a unit has both a 2026 contract and a 2027 renewed contract, keep the latest contract data
@@ -1010,9 +1034,12 @@ async function runSync() {
       const effectiveRole = (existingFirestoreUser?.role === 'admin' || existingFirestoreUser?.role === 'technician')
         ? existingFirestoreUser.role
         : 'tenant';
+      const effectiveName = (existingFirestoreUser?.profileEditedAt && existingFirestoreUser?.name && String(existingFirestoreUser.name).trim().length > 0)
+        ? String(existingFirestoreUser.name).trim()
+        : group.name;
 
       const userData = {
-        name: group.name,
+        name: effectiveName,
         phone: effectivePhone,
         allPhones: validMobiles,
         email: email,

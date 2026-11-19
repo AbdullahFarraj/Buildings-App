@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../../core/theme/app_colors.dart';
 
 class LoginView extends StatefulWidget {
@@ -15,106 +15,172 @@ class _LoginViewState extends State<LoginView> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscurePassword = true;
 
   Future<void> _login() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
+    if (!_formKey.currentState!.validate()) return;
 
-      String emailInput = _emailController.text.trim();
-      final passwordInput = _passwordController.text.trim();
+    setState(() => _isLoading = true);
 
-      // If user typed a phone number instead of an email, look up their email
-      if (!emailInput.contains('@')) {
-        String cleanPhone = emailInput.replaceAll(RegExp(r'\D'), '');
-        String fullPhone = cleanPhone;
-        if (cleanPhone.startsWith('05') && cleanPhone.length == 10) {
-          fullPhone = '971${cleanPhone.substring(1)}';
-        } else if (cleanPhone.startsWith('5') && cleanPhone.length == 9) {
-          fullPhone = '971$cleanPhone';
+    final rawInput = _emailController.text.trim();
+    final passwordInput = _passwordController.text.trim();
+
+    try {
+      if (!rawInput.contains('@')) {
+        // Server-side phone+password login prevents unauthenticated phone_index enumeration
+        final callable = FirebaseFunctions.instance.httpsCallable('signInWithPhonePassword');
+        final response = await callable.call({
+          'phone': rawInput,
+          'password': passwordInput,
+        });
+        final data = response.data is Map ? Map<String, dynamic>.from(response.data as Map) : <String, dynamic>{};
+
+        if (data['customToken'] is String && (data['customToken'] as String).isNotEmpty) {
+          await FirebaseAuth.instance.signInWithCustomToken(data['customToken'] as String);
+        } else if (data['verifiedEmail'] is String && data['verifiedPassword'] is String) {
+          await FirebaseAuth.instance.signInWithEmailAndPassword(
+            email: data['verifiedEmail'] as String,
+            password: data['verifiedPassword'] as String,
+          );
+        } else {
+          throw Exception('Invalid authentication response');
         }
-
-        try {
-          // 1. Try phone_index lookup first (safe, public, unauthenticated)
-          final phoneDoc = await FirebaseFirestore.instance
-              .collection('phone_index')
-              .doc(fullPhone)
-              .get();
-          
-          if (phoneDoc.exists && phoneDoc.data()?['email'] != null) {
-            emailInput = phoneDoc.data()!['email'].toString().trim();
-          } else {
-            // Check by original typed phone (e.g. 05...)
-            final localDoc = await FirebaseFirestore.instance
-                .collection('phone_index')
-                .doc(cleanPhone)
-                .get();
-            if (localDoc.exists && localDoc.data()?['email'] != null) {
-              emailInput = localDoc.data()!['email'].toString().trim();
-            } else {
-              // 2. Fallback to standard generated email format
-              emailInput = '$fullPhone@elitelivingre.ae';
-            }
-          }
-        } catch (_) {
-          emailInput = '$fullPhone@elitelivingre.ae';
-        }
-      }
-
-      try {
+      } else {
         await FirebaseAuth.instance.signInWithEmailAndPassword(
-          email: emailInput,
+          email: rawInput,
           password: passwordInput,
         );
-        // AuthWrapper will detect the change and route the user automatically.
-      } on FirebaseAuthException catch (e) {
-        // If password failed and looks like a phone number, try alternative phone prefix
-        bool retrySuccess = false;
-        if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
-          final cleanDigits = passwordInput.replaceAll(RegExp(r'\D'), '');
-          if (cleanDigits.startsWith('05') && cleanDigits.length == 10) {
-            try {
-              await FirebaseAuth.instance.signInWithEmailAndPassword(
-                email: emailInput,
-                password: '971${cleanDigits.substring(1)}',
-              );
-              retrySuccess = true;
-            } catch (_) {}
-          } else if (cleanDigits.startsWith('9715') && cleanDigits.length == 12) {
-            try {
-              await FirebaseAuth.instance.signInWithEmailAndPassword(
-                email: emailInput,
-                password: '0${cleanDigits.substring(3)}',
-              );
-              retrySuccess = true;
-            } catch (_) {}
-          }
-        }
-
-        if (!retrySuccess) {
-          if (!mounted) return;
-          String errorMessage = 'An error occurred while logging in.';
-          if (e.code == 'user-not-found') {
-            errorMessage = 'No account found with this email or phone.';
-          } else if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
-            errorMessage = 'Incorrect credentials. Please check your email/phone and password.';
-          } else if (e.code == 'invalid-email') {
-            errorMessage = 'The email address format is invalid.';
-          } else {
-            errorMessage = e.message ?? errorMessage;
-          }
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(errorMessage)),
-          );
-        }
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      } finally {
-        if (mounted) setState(() => _isLoading = false);
       }
+      // AuthWrapper will detect the auth change and route automatically.
+    } on FirebaseFunctionsException catch (e) {
+      if (!mounted) return;
+      String errorMessage;
+      switch (e.code) {
+        case 'unauthenticated':
+          errorMessage = 'Incorrect credentials. Please check your phone number and password.';
+          break;
+        case 'resource-exhausted':
+          errorMessage = 'Too many failed login attempts. Please try again later.';
+          break;
+        case 'invalid-argument':
+          errorMessage = 'Please enter a valid phone number and password.';
+          break;
+        default:
+          errorMessage = 'Unable to sign in right now. Please check your connection and try again.';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(errorMessage)),
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      String errorMessage = 'Unable to sign in. Please check your credentials and try again.';
+      if (e.code == 'user-not-found') {
+        errorMessage = 'No account found with this email or phone.';
+      } else if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        errorMessage = 'Incorrect credentials. Please check your email/phone and password.';
+      } else if (e.code == 'invalid-email') {
+        errorMessage = 'The email address format is invalid.';
+      } else if (e.code == 'too-many-requests') {
+        errorMessage = 'Too many failed login attempts. Please try again later.';
+      } else if (e.code == 'network-request-failed') {
+        errorMessage = 'Network error. Please check your internet connection.';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(errorMessage)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to sign in right now. Please try again.')),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _showForgotPasswordDialog() async {
+    final resetController = TextEditingController(text: _emailController.text.trim());
+    bool isSending = false;
+
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogCtx) {
+          return StatefulBuilder(
+            builder: (ctx, setDialogState) {
+              return AlertDialog(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                title: const Text('Reset Password'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Enter your registered email address or UAE mobile number to receive a password reset link.',
+                      style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: resetController,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(
+                        hintText: 'Email or Mobile Number',
+                        prefixIcon: Icon(Icons.lock_reset),
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: isSending ? null : () => Navigator.pop(dialogCtx),
+                    child: const Text('Cancel'),
+                  ),
+                  ElevatedButton(
+                    onPressed: isSending
+                        ? null
+                        : () async {
+                            final identifier = resetController.text.trim();
+                            if (identifier.isEmpty) return;
+
+                            setDialogState(() => isSending = true);
+                            try {
+                              await FirebaseFunctions.instance
+                                  .httpsCallable('requestPasswordReset')
+                                  .call({'identifier': identifier});
+                            } catch (_) {
+                              // Keep response uniform so accounts cannot be enumerated
+                            }
+
+                            if (dialogCtx.mounted) {
+                              Navigator.pop(dialogCtx);
+                            }
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  duration: Duration(seconds: 6),
+                                  content: Text(
+                                    'If a registered email is associated with this account, a password reset link has been sent. If you don\'t receive it, please contact management.',
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                    child: isSending
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('Send Reset Link'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      resetController.dispose();
     }
   }
 
@@ -268,99 +334,110 @@ class _LoginViewState extends State<LoginView> {
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 24),
-                      TextFormField(
-                        controller: _emailController,
-                        decoration: InputDecoration(
-                          hintText: 'Email or Mobile Number',
-                          prefixIcon: const Icon(Icons.person_outline),
-                        ),
-                        keyboardType: TextInputType.emailAddress,
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Please enter your email or phone number';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _passwordController,
-                        decoration: InputDecoration(
-                          hintText: 'Password',
-                          prefixIcon: const Icon(Icons.lock_outline),
-                        ),
-                        obscureText: true,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter a password';
-                          }
-                          if (value.length < 6) {
-                            return 'Password must be at least 6 characters';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 32),
-                      SizedBox(
-                        height: 48,
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _login,
-                          child: _isLoading
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Text('Sign In'),
-                        ),
-                      ),
-                      // Self sign-up is disabled: tenant accounts are created by the
-                      // management / sync service only (see firestore.rules).
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Don\'t have an account? Please contact the management office.',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 24),
-                      Row(
-                        children: [
-                          Expanded(child: Divider(color: Colors.grey.shade300)),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Text(
-                              'OR',
-                              style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.bold),
+                          TextFormField(
+                            controller: _emailController,
+                            decoration: const InputDecoration(
+                              hintText: 'Email or Mobile Number',
+                              prefixIcon: Icon(Icons.person_outline),
+                            ),
+                            keyboardType: TextInputType.emailAddress,
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Please enter your email or phone number';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _passwordController,
+                            decoration: InputDecoration(
+                              hintText: 'Password',
+                              prefixIcon: const Icon(Icons.lock_outline),
+                              suffixIcon: IconButton(
+                                icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
+                                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                              ),
+                            ),
+                            obscureText: _obscurePassword,
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter a password';
+                              }
+                              if (value.length < 6) {
+                                return 'Password must be at least 6 characters';
+                              }
+                              return null;
+                            },
+                          ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: _isLoading ? null : _showForgotPasswordDialog,
+                              child: const Text('Forgot Password?', style: TextStyle(fontSize: 13)),
                             ),
                           ),
-                          Expanded(child: Divider(color: Colors.grey.shade300)),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            height: 48,
+                            child: ElevatedButton(
+                              onPressed: _isLoading ? null : _login,
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Text('Sign In'),
+                            ),
+                          ),
+                          // Self sign-up is disabled: tenant accounts are created by the
+                          // management / sync service only (see firestore.rules).
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Don\'t have an account? Please contact the management office.',
+                            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 24),
+                          Row(
+                            children: [
+                              Expanded(child: Divider(color: Colors.grey.shade300)),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                child: Text(
+                                  'OR',
+                                  style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              Expanded(child: Divider(color: Colors.grey.shade300)),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.explore_outlined, color: AppColors.primary),
+                            label: const Text(
+                              'Explore Demo Mode',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              side: const BorderSide(color: AppColors.primary),
+                            ),
+                            onPressed: _isLoading ? null : _showDemoSelector,
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.explore_outlined, color: AppColors.primary),
-                        label: const Text(
-                          'Explore Demo Mode',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          side: const BorderSide(color: AppColors.primary),
-                        ),
-                        onPressed: _isLoading ? null : _showDemoSelector,
-                      ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
-      ),
-    ),
       ),
     );
   }

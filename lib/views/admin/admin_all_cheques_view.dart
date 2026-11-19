@@ -60,6 +60,7 @@ class _AdminAllChequesViewState extends State<AdminAllChequesView> {
           .toSet()
           .toList()..sort();
 
+      if (!mounted) return;
       setState(() {
         _allCheques = cheques;
         _buildings = ['All Buildings', ...dynamicBuildings];
@@ -71,6 +72,7 @@ class _AdminAllChequesViewState extends State<AdminAllChequesView> {
 
       _applyFilters();
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;

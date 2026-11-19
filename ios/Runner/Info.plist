@@ -70,13 +70,17 @@
 	<string>We need access to the camera to allow tenants and technicians to photograph maintenance issues and repair proof.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>We need access to your photos to attach images of maintenance issues and proof of completion.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>We need permission to save photos to your photo library.</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>tel</string>
+		<string>mailto</string>
+		<string>https</string>
+		<string>whatsapp</string>
+	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>UIBackgroundModes</key>
 	<array>
-		<string>fetch</string>
 		<string>remote-notification</string>
 	</array>
 </dict>

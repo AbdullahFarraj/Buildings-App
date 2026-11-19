@@ -1,6 +1,11 @@
 [
   {
-    "origin": ["*"],
+    "origin": [
+      "https://building-app1.web.app",
+      "https://building-app1.firebaseapp.com",
+      "https://binshafar-properties-dev.web.app",
+      "https://binshafar-properties-dev.firebaseapp.com"
+    ],
     "method": ["GET"],
     "maxAgeSeconds": 3600
   }

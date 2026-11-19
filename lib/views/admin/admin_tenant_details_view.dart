@@ -13,8 +13,10 @@ import '../../models/user_model.dart';
 import '../../models/contract_model.dart';
 import '../../models/cheque_model.dart';
 import '../../services/firestore_service.dart';
+import '../../services/notification_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../utils/contact_helper.dart';
+import '../../utils/phone_helper.dart';
 import '../shared/chat_sheet.dart';
 import 'tenant_requests_view.dart';
 
@@ -31,6 +33,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
   final FirestoreService _firestoreService = FirestoreService();
   late UserModel _tenant;
   late TabController _tabController;
+  late Future<List<ContractModel>> _contractsFuture;
 
   bool _isLoading = false;
   String _chequeFilter = 'all'; // all, pending, due_soon, paid, overdue, bounced
@@ -43,6 +46,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
     super.initState();
     _tenant = widget.tenant;
     _tabController = TabController(length: 3, vsync: this);
+    _contractsFuture = _firestoreService.getContractsByTenant(_tenant.uid);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refreshTenant();
     });
@@ -57,12 +61,24 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
   Future<void> _refreshTenant() async {
     try {
       final updated = await _firestoreService.getUser(_tenant.uid);
-      if (updated != null && mounted) {
+      if (mounted) {
         setState(() {
-          _tenant = updated;
+          if (updated != null) {
+            _tenant = updated;
+          }
+          _contractsFuture = _firestoreService.getContractsByTenant(_tenant.uid);
         });
       }
     } catch (_) {}
+  }
+
+  DateTime _addMonthsSafe(DateTime date, int months) {
+    final totalMonths = (date.month - 1) + months;
+    final targetYear = date.year + (totalMonths ~/ 12);
+    final targetMonth = (totalMonths % 12) + 1;
+    final lastDayOfTargetMonth = DateTime(targetYear, targetMonth + 1, 0).day;
+    final clampedDay = date.day > lastDayOfTargetMonth ? lastDayOfTargetMonth : date.day;
+    return DateTime(targetYear, targetMonth, clampedDay);
   }
 
   // ==========================================
@@ -81,12 +97,19 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
     
     DateTime selectedDate = DateTime.now().add(const Duration(days: 30));
     String selectedStatus = 'pending';
-    String? selectedBuilding = preselectedContract?.buildingName ?? 
-        (_tenant.allProperties.isNotEmpty ? _tenant.allProperties.first.buildingName : null);
-    String? selectedUnit = preselectedContract?.unitNumber ?? 
-        (_tenant.allProperties.isNotEmpty ? _tenant.allProperties.first.unitNumber : null);
-    String? selectedContractCode = preselectedContract?.contractCode ?? 
-        (_tenant.allProperties.isNotEmpty ? _tenant.allProperties.first.contractCode : null);
+    int selectedPropertyIndex = 0;
+    if (preselectedContract != null && _tenant.allProperties.isNotEmpty) {
+      final matchIdx = _tenant.allProperties.indexWhere(
+        (p) => p.buildingName == preselectedContract.buildingName && p.unitNumber == preselectedContract.unitNumber,
+      );
+      if (matchIdx >= 0) selectedPropertyIndex = matchIdx;
+    }
+    String? selectedBuilding = preselectedContract?.buildingName ??
+        (_tenant.allProperties.isNotEmpty ? _tenant.allProperties[selectedPropertyIndex].buildingName : null);
+    String? selectedUnit = preselectedContract?.unitNumber ??
+        (_tenant.allProperties.isNotEmpty ? _tenant.allProperties[selectedPropertyIndex].unitNumber : null);
+    String? selectedContractCode = preselectedContract?.contractCode ??
+        (_tenant.allProperties.isNotEmpty ? _tenant.allProperties[selectedPropertyIndex].contractCode : null);
 
     final List<String> popularBanks = [
       'Emirates NBD',
@@ -143,7 +166,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: popularBanks.contains(bankCtrl.text) ? bankCtrl.text : 'Other',
+                      initialValue: popularBanks.contains(bankCtrl.text) ? bankCtrl.text : 'Other',
                       decoration: const InputDecoration(
                         labelText: 'Bank Name',
                         border: OutlineInputBorder(),
@@ -210,7 +233,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: selectedStatus,
+                      initialValue: selectedStatus,
                       decoration: const InputDecoration(
                         labelText: 'Cheque Status',
                         border: OutlineInputBorder(),
@@ -229,23 +252,25 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                     ),
                     if (_tenant.allProperties.isNotEmpty) ...[
                       const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        value: selectedUnit,
+                      DropdownButtonFormField<int>(
+                        initialValue: selectedPropertyIndex,
                         decoration: const InputDecoration(
                           labelText: 'Associated Property / Unit',
                           border: OutlineInputBorder(),
                           prefixIcon: Icon(Icons.apartment),
                         ),
-                        items: _tenant.allProperties.map((p) {
-                          return DropdownMenuItem(
-                            value: p.unitNumber,
+                        items: List.generate(_tenant.allProperties.length, (i) {
+                          final p = _tenant.allProperties[i];
+                          return DropdownMenuItem<int>(
+                            value: i,
                             child: Text('${p.buildingName} - Apt ${p.unitNumber}'),
                           );
-                        }).toList(),
-                        onChanged: (val) {
-                          if (val != null) {
-                            final matched = _tenant.allProperties.firstWhere((p) => p.unitNumber == val);
+                        }),
+                        onChanged: (idx) {
+                          if (idx != null) {
+                            final matched = _tenant.allProperties[idx];
                             setDialogState(() {
+                              selectedPropertyIndex = idx;
                               selectedUnit = matched.unitNumber;
                               selectedBuilding = matched.buildingName;
                               selectedContractCode = matched.contractCode;
@@ -328,7 +353,12 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
           },
         );
       },
-    );
+    ).whenComplete(() {
+      chequeNumCtrl.dispose();
+      bankCtrl.dispose();
+      amountCtrl.dispose();
+      notesCtrl.dispose();
+    });
   }
 
   void _showEditChequeDialog(ChequeModel cheque) {
@@ -415,7 +445,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: selectedStatus,
+                      initialValue: selectedStatus,
                       decoration: const InputDecoration(labelText: 'Cheque Status', border: OutlineInputBorder()),
                       items: const [
                         DropdownMenuItem(value: 'pending', child: Text('Pending')),
@@ -482,7 +512,12 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
           },
         );
       },
-    );
+    ).whenComplete(() {
+      chequeNumCtrl.dispose();
+      bankCtrl.dispose();
+      amountCtrl.dispose();
+      notesCtrl.dispose();
+    });
   }
 
   Future<void> _toggleChequePaid(ChequeModel cheque) async {
@@ -599,7 +634,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<int>(
-                      value: installmentsCount,
+                      initialValue: installmentsCount,
                       decoration: const InputDecoration(
                         labelText: 'Installments Count (Cheques)',
                         border: OutlineInputBorder(),
@@ -659,7 +694,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
                           const SizedBox(height: 4),
                           ...List.generate(installmentsCount, (i) {
                             final monthsToAdd = ((12 / installmentsCount) * i).round();
-                            final due = DateTime(startDate.year, startDate.month + monthsToAdd, startDate.day);
+                            final due = _addMonthsSafe(startDate, monthsToAdd);
                             return Padding(
                               padding: const EdgeInsets.symmetric(vertical: 2.0),
                               child: Row(
@@ -692,7 +727,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
 
                       for (int i = 0; i < installmentsCount; i++) {
                         final monthsToAdd = ((12 / installmentsCount) * i).round();
-                        final due = DateTime(startDate.year, startDate.month + monthsToAdd, startDate.day);
+                        final due = _addMonthsSafe(startDate, monthsToAdd);
                         final chqNum = (startNum + i).toString().padLeft(6, '0');
 
                         generated.add(ChequeModel(
@@ -732,7 +767,10 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
           },
         );
       },
-    );
+    ).whenComplete(() {
+      bankCtrl.dispose();
+      baseChequeNumCtrl.dispose();
+    });
   }
 
   // ==========================================
@@ -740,8 +778,13 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
   // ==========================================
 
   Future<void> _openUrl(String? urlString) async {
-    if (urlString == null || urlString.isEmpty) return;
-    final uri = Uri.tryParse(urlString);
+    if (!PhoneHelper.isSafeHttpsUrl(urlString)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid or unsafe link')));
+      }
+      return;
+    }
+    final uri = Uri.tryParse(urlString!.trim());
     if (uri == null) return;
     try {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -758,22 +801,41 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
     );
     if (platformFile != null) {
+      final fileSize = platformFile.lengthSync() ?? await platformFile.length();
+      if (!mounted) return;
+      if (fileSize != null && fileSize > 25 * 1024 * 1024) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('File is too large. Maximum size is 25 MB.')),
+        );
+        return;
+      }
+
       setState(() => _isLoading = true);
-      final ext = platformFile.extension ?? 'pdf';
+      final ext = (platformFile.extension ?? 'pdf').toLowerCase();
       final fileName = 'contract_${const Uuid().v4()}.$ext';
       final path = 'contracts/${_tenant.uid}/$fileName';
+
+      String contentType = 'application/pdf';
+      if (ext == 'jpg' || ext == 'jpeg') {
+        contentType = 'image/jpeg';
+      } else if (ext == 'png') {
+        contentType = 'image/png';
+      } else if (ext == 'webp') {
+        contentType = 'image/webp';
+      }
+      final metadata = SettableMetadata(contentType: contentType);
 
       try {
         final ref = FirebaseStorage.instance.ref().child(path);
         UploadTask uploadTask;
         if (kIsWeb) {
           final bytes = await platformFile.readAsBytes();
-          uploadTask = ref.putData(bytes);
+          uploadTask = ref.putData(bytes, metadata);
         } else if (platformFile.path != null) {
-          uploadTask = ref.putFile(File(platformFile.path!));
+          uploadTask = ref.putFile(File(platformFile.path!), metadata);
         } else {
           final bytes = await platformFile.readAsBytes();
-          uploadTask = ref.putData(bytes);
+          uploadTask = ref.putData(bytes, metadata);
         }
         final snap = await uploadTask;
         final url = await snap.ref.getDownloadURL();
@@ -812,18 +874,17 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
             onPressed: () async {
-              if (titleCtrl.text.isEmpty || msgCtrl.text.isEmpty) return;
+              if (titleCtrl.text.trim().isEmpty || msgCtrl.text.trim().isEmpty) return;
+              final title = titleCtrl.text.trim();
+              final message = msgCtrl.text.trim();
               Navigator.pop(ctx);
               setState(() => _isLoading = true);
               try {
-                await FirebaseFirestore.instance.collection('notifications').add({
-                  'userId': _tenant.uid,
-                  'title': titleCtrl.text.trim(),
-                  'message': msgCtrl.text.trim(),
-                  'timestamp': FieldValue.serverTimestamp(),
-                  'createdAt': FieldValue.serverTimestamp(),
-                  'isRead': false,
-                });
+                await NotificationService().sendNotification(
+                  userId: _tenant.uid,
+                  title: title,
+                  message: message,
+                );
                 if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Notification sent successfully')));
               } catch (e) {
                 if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
@@ -835,7 +896,10 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
           ),
         ],
       ),
-    );
+    ).whenComplete(() {
+      titleCtrl.dispose();
+      msgCtrl.dispose();
+    });
   }
 
   // ==========================================
@@ -1507,7 +1571,7 @@ class _AdminTenantDetailsViewState extends State<AdminTenantDetailsView> with Si
 
   Widget _buildContractsTab() {
     return FutureBuilder<List<ContractModel>>(
-      future: _firestoreService.getContractsByTenant(_tenant.uid),
+      future: _contractsFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());

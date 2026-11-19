@@ -40,13 +40,30 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
+      # 4.5. Configure Android Release Signing (when GitHub Secrets are configured)
+      - name: Configure Android Release Signing
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > android/app/upload-keystore.jks
+          cat <<EOF > android/key.properties
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyPassword=$ANDROID_KEY_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          storeFile=upload-keystore.jks
+          EOF
+
       # 5. Build Android App Bundle (Google Play Release)
       - name: Build Release App Bundle
-        run: flutter build appbundle --release --android-skip-build-dependency-validation
+        run: flutter build appbundle --release --android-skip-build-dependency-validation --obfuscate --split-debug-info=build/app/outputs/symbols
 
       # 6. Build Android APK (Release)
       - name: Build Release APK
-        run: flutter build apk --release --android-skip-build-dependency-validation
+        run: flutter build apk --release --android-skip-build-dependency-validation --obfuscate --split-debug-info=build/app/outputs/symbols
 
       # 7. Upload App Bundle Artifact (for Google Play Console)
       - name: Upload App Bundle Artifact

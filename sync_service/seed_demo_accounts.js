@@ -27,6 +27,12 @@ console.log(`🚀 [Seed Demo] Target Project: ${serviceAccount.project_id} [${is
 const db = admin.firestore();
 const auth = admin.auth();
 
+function addDays(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
 async function getOrCreateUser(email, password, displayName, role, phone) {
   let userRecord;
   try {
@@ -57,6 +63,13 @@ async function seed() {
 
   const password = 'Demo@123456';
 
+  const t1Start = addDays(-180);
+  const t1End = addDays(185);
+  const t2Start = addDays(-330);
+  const t2End = addDays(35); // Expiring within 60 days for Admin Expiring Contracts card
+  const t3Start = addDays(-90);
+  const t3End = addDays(275);
+
   // 1. Tenant (Fictional: Alexander Wright)
   const tenantAuth = await getOrCreateUser(
     'demo.tenant@elitelivingre.ae',
@@ -79,12 +92,12 @@ async function seed() {
       {
         buildingName: 'Marina Crown Tower',
         unitNumber: '1404',
-        startDate: '2026-01-01T00:00:00.000Z',
-        endDate: '2026-12-31T23:59:59.000Z'
+        startDate: t1Start.toISOString(),
+        endDate: t1End.toISOString()
       }
     ],
-    contractStartDate: admin.firestore.Timestamp.fromDate(new Date('2026-01-01')),
-    contractEndDate: admin.firestore.Timestamp.fromDate(new Date('2026-12-31')),
+    contractStartDate: admin.firestore.Timestamp.fromDate(t1Start),
+    contractEndDate: admin.firestore.Timestamp.fromDate(t1End),
     contractUrl: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
     ledgerBalance: 0,
     totalDebit: 95000,
@@ -93,7 +106,7 @@ async function seed() {
   };
   await db.collection('users').doc(tenantAuth.uid).set(tenantData, { merge: true });
 
-  // 1b. Additional Fictional Tenant 2: Sarah Jenkins
+  // 1b. Additional Fictional Tenant 2: Sarah Jenkins (Expiring soon)
   const tenant2Auth = await getOrCreateUser(
     'demo.tenant2@elitelivingre.ae',
     password,
@@ -114,12 +127,12 @@ async function seed() {
       {
         buildingName: 'Palm Views Residence',
         unitNumber: '802',
-        startDate: '2026-02-01T00:00:00.000Z',
-        endDate: '2027-01-31T23:59:59.000Z'
+        startDate: t2Start.toISOString(),
+        endDate: t2End.toISOString()
       }
     ],
-    contractStartDate: admin.firestore.Timestamp.fromDate(new Date('2026-02-01')),
-    contractEndDate: admin.firestore.Timestamp.fromDate(new Date('2027-01-31')),
+    contractStartDate: admin.firestore.Timestamp.fromDate(t2Start),
+    contractEndDate: admin.firestore.Timestamp.fromDate(t2End),
     contractUrl: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
     ledgerBalance: 0,
     totalDebit: 75000,
@@ -148,16 +161,16 @@ async function seed() {
       {
         buildingName: 'Downtown Heights',
         unitNumber: '2105',
-        startDate: '2026-03-01T00:00:00.000Z',
-        endDate: '2027-02-28T23:59:59.000Z'
+        startDate: t3Start.toISOString(),
+        endDate: t3End.toISOString()
       }
     ],
-    contractStartDate: admin.firestore.Timestamp.fromDate(new Date('2026-03-01')),
-    contractEndDate: admin.firestore.Timestamp.fromDate(new Date('2027-02-28')),
+    contractStartDate: admin.firestore.Timestamp.fromDate(t3Start),
+    contractEndDate: admin.firestore.Timestamp.fromDate(t3End),
     contractUrl: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
-    ledgerBalance: 0,
+    ledgerBalance: 15000,
     totalDebit: 60000,
-    totalCredit: 30000,
+    totalCredit: 45000,
     createdAt: admin.firestore.FieldValue.serverTimestamp()
   }, { merge: true });
 
@@ -205,7 +218,7 @@ async function seed() {
   };
   await db.collection('users').doc(adminAuth.uid).set(adminData, { merge: true });
 
-  // 4. Contract in contracts collection
+  // 4. Contracts in contracts collection
   await db.collection('contracts').doc('DEMO-CTR-1404').set({
     contractCode: 'DEMO-CTR-1404',
     contractNumber: 1404,
@@ -215,8 +228,8 @@ async function seed() {
     tenantName: 'Alexander Wright',
     mobileNumber: '0500000001',
     customerEmail: 'demo.tenant@elitelivingre.ae',
-    startDate: admin.firestore.Timestamp.fromDate(new Date('2026-01-01')),
-    endDate: admin.firestore.Timestamp.fromDate(new Date('2026-12-31')),
+    startDate: admin.firestore.Timestamp.fromDate(t1Start),
+    endDate: admin.firestore.Timestamp.fromDate(t1End),
     rentAmount: 95000,
     yearValue: 95000,
     contractState: 'Active',
@@ -233,8 +246,8 @@ async function seed() {
     tenantName: 'Sarah Jenkins',
     mobileNumber: '0500000004',
     customerEmail: 'demo.tenant2@elitelivingre.ae',
-    startDate: admin.firestore.Timestamp.fromDate(new Date('2026-02-01')),
-    endDate: admin.firestore.Timestamp.fromDate(new Date('2027-01-31')),
+    startDate: admin.firestore.Timestamp.fromDate(t2Start),
+    endDate: admin.firestore.Timestamp.fromDate(t2End),
     rentAmount: 75000,
     yearValue: 75000,
     contractState: 'Active',
@@ -251,8 +264,8 @@ async function seed() {
     tenantName: 'Marcus Vance',
     mobileNumber: '0500000005',
     customerEmail: 'demo.tenant3@elitelivingre.ae',
-    startDate: admin.firestore.Timestamp.fromDate(new Date('2026-03-01')),
-    endDate: admin.firestore.Timestamp.fromDate(new Date('2027-02-28')),
+    startDate: admin.firestore.Timestamp.fromDate(t3Start),
+    endDate: admin.firestore.Timestamp.fromDate(t3End),
     rentAmount: 60000,
     yearValue: 60000,
     contractState: 'Active',
@@ -260,14 +273,14 @@ async function seed() {
     isDemo: true
   }, { merge: true });
 
-  // 5. Four Quarterly Cheques
+  // 5. Cheques (using valid ChequeModel statuses: 'paid', 'pending'; dueSoon & overdue are computed dynamically from dueDate)
   const cheques = [
     {
       id: 'demo_chq_1',
       chequeNumber: '000841',
       bankName: 'Emirates NBD',
       amount: 23750,
-      dueDate: admin.firestore.Timestamp.fromDate(new Date('2026-01-01')),
+      dueDate: admin.firestore.Timestamp.fromDate(addDays(-180)),
       status: 'paid',
       notes: 'Quarter 1 Rent - Cleared on time'
     },
@@ -276,7 +289,7 @@ async function seed() {
       chequeNumber: '000842',
       bankName: 'Emirates NBD',
       amount: 23750,
-      dueDate: admin.firestore.Timestamp.fromDate(new Date('2026-04-01')),
+      dueDate: admin.firestore.Timestamp.fromDate(addDays(-90)),
       status: 'paid',
       notes: 'Quarter 2 Rent - Cleared on time'
     },
@@ -285,16 +298,16 @@ async function seed() {
       chequeNumber: '000843',
       bankName: 'Emirates NBD',
       amount: 23750,
-      dueDate: admin.firestore.Timestamp.fromDate(new Date('2026-07-01')),
-      status: 'due_soon',
-      notes: 'Quarter 3 Rent - Deposited for collection'
+      dueDate: admin.firestore.Timestamp.fromDate(addDays(7)), // Due soon (<= 15 days)
+      status: 'pending',
+      notes: 'Quarter 3 Rent - Due soon for collection'
     },
     {
       id: 'demo_chq_4',
       chequeNumber: '000844',
       bankName: 'Emirates NBD',
       amount: 23750,
-      dueDate: admin.firestore.Timestamp.fromDate(new Date('2026-10-01')),
+      dueDate: admin.firestore.Timestamp.fromDate(addDays(95)), // Upcoming
       status: 'pending',
       notes: 'Quarter 4 Rent - Post-dated cheque in safe'
     },
@@ -305,7 +318,7 @@ async function seed() {
       chequeNumber: '001920',
       bankName: 'Abu Dhabi Commercial Bank (ADCB)',
       amount: 37500,
-      dueDate: admin.firestore.Timestamp.fromDate(new Date('2026-02-01')),
+      dueDate: admin.firestore.Timestamp.fromDate(addDays(-330)),
       status: 'paid',
       contractCode: 'DEMO-CTR-802',
       buildingName: 'Palm Views Residence',
@@ -319,8 +332,8 @@ async function seed() {
       chequeNumber: '001921',
       bankName: 'Abu Dhabi Commercial Bank (ADCB)',
       amount: 37500,
-      dueDate: admin.firestore.Timestamp.fromDate(new Date('2026-08-01')),
-      status: 'due_soon',
+      dueDate: admin.firestore.Timestamp.fromDate(addDays(10)), // Due soon (<= 15 days)
+      status: 'pending',
       contractCode: 'DEMO-CTR-802',
       buildingName: 'Palm Views Residence',
       unitNumber: '802',
@@ -333,7 +346,7 @@ async function seed() {
       chequeNumber: '003101',
       bankName: 'Dubai Islamic Bank (DIB)',
       amount: 15000,
-      dueDate: admin.firestore.Timestamp.fromDate(new Date('2026-03-01')),
+      dueDate: admin.firestore.Timestamp.fromDate(addDays(-90)),
       status: 'paid',
       contractCode: 'DEMO-CTR-2105',
       buildingName: 'Downtown Heights',
@@ -347,8 +360,8 @@ async function seed() {
       chequeNumber: '003102',
       bankName: 'Dubai Islamic Bank (DIB)',
       amount: 15000,
-      dueDate: admin.firestore.Timestamp.fromDate(new Date('2026-06-01')),
-      status: 'overdue',
+      dueDate: admin.firestore.Timestamp.fromDate(addDays(-5)), // Overdue (-5 days)
+      status: 'pending',
       contractCode: 'DEMO-CTR-2105',
       buildingName: 'Downtown Heights',
       unitNumber: '2105',
@@ -374,7 +387,7 @@ async function seed() {
     }, { merge: true });
   }
 
-  // 6. Realistic Tasks
+  // 6. Realistic Tasks (status values match TaskStatus enum camelCase)
   const task1Ref = db.collection('tasks').doc('demo_task_1');
   await task1Ref.set({
     tenantId: tenantAuth.uid,
@@ -383,7 +396,7 @@ async function seed() {
     title: 'Chilled Water AC Leakage in Living Room',
     description: 'Noticeable condensation dripping from the ceiling diffuser grill. Needs coil cleaning and drain line inspection.',
     category: 'HVAC',
-    status: 'in_progress',
+    status: 'inProgress',
     technicianId: techAuth.uid,
     technicianName: 'Rashid Al-Mansoor',
     createdAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() - 3600000 * 5)),
@@ -434,10 +447,43 @@ async function seed() {
     completionProofUrl: 'https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=800&q=80'
   }, { merge: true });
 
-  // 7. Phone Index for direct phone logins
-  await db.collection('phone_index').doc('971500000001').set({ email: 'demo.tenant@elitelivingre.ae', uid: tenantAuth.uid, isDemo: true }, { merge: true });
-  await db.collection('phone_index').doc('971500000002').set({ email: 'demo.technician@elitelivingre.ae', uid: techAuth.uid, isDemo: true }, { merge: true });
-  await db.collection('phone_index').doc('971500000003').set({ email: 'demo.admin@elitelivingre.ae', uid: adminAuth.uid, isDemo: true }, { merge: true });
+  // 7. Phone Index for direct phone logins (both 9715... and 05... formats)
+  const phoneEntries = [
+    { phone: '971500000001', local: '0500000001', email: 'demo.tenant@elitelivingre.ae', uid: tenantAuth.uid },
+    { phone: '971500000002', local: '0500000002', email: 'demo.technician@elitelivingre.ae', uid: techAuth.uid },
+    { phone: '971500000003', local: '0500000003', email: 'demo.admin@elitelivingre.ae', uid: adminAuth.uid },
+  ];
+  for (const entry of phoneEntries) {
+    await db.collection('phone_index').doc(entry.phone).set({ email: entry.email, uid: entry.uid, isDemo: true }, { merge: true });
+    await db.collection('phone_index').doc(entry.local).set({ email: entry.email, uid: entry.uid, isDemo: true }, { merge: true });
+  }
+
+  // 8. Demo Direct Chat & Sample Messages
+  const demoChatRef = db.collection('direct_chats').doc(tenantAuth.uid);
+  await demoChatRef.set({
+    isDemo: true,
+    lastSenderName: 'Property Manager',
+    lastMessage: 'We have scheduled our technician to inspect your AC unit shortly.',
+    lastMessageAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() - 3600000 * 2))
+  }, { merge: true });
+
+  await demoChatRef.collection('messages').doc('demo_msg_1').set({
+    senderId: tenantAuth.uid,
+    senderName: 'Alexander Wright',
+    text: 'Hello, could you confirm when the HVAC technician will visit Apt 1404?',
+    fileUrl: null,
+    fileName: null,
+    createdAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() - 3600000 * 3))
+  }, { merge: true });
+
+  await demoChatRef.collection('messages').doc('demo_msg_2').set({
+    senderId: adminAuth.uid,
+    senderName: 'Property Manager',
+    text: 'We have scheduled our technician to inspect your AC unit shortly.',
+    fileUrl: null,
+    fileName: null,
+    createdAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() - 3600000 * 2))
+  }, { merge: true });
 
   console.log('✅ 100% FICTIONAL REALISTIC DEMO DATA SUCCESSFULLY WRITTEN!');
 }

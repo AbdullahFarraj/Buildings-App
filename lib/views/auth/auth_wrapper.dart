@@ -18,8 +18,24 @@ class AuthWrapper extends StatefulWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
-  /// Forces the user document to be re-fetched (e.g. after the password was changed).
-  void _reload() => setState(() {});
+  String? _cachedUid;
+  Future<DocumentSnapshot>? _userFuture;
+  String? _syncedTokenUid;
+
+  /// Forces the user document to be re-fetched (e.g. after password change or retry).
+  void _reload() {
+    setState(() {
+      _userFuture = null;
+    });
+  }
+
+  Future<DocumentSnapshot> _getUserFuture(String uid) {
+    if (_cachedUid != uid || _userFuture == null) {
+      _cachedUid = uid;
+      _userFuture = FirebaseFirestore.instance.collection('users').doc(uid).get();
+    }
+    return _userFuture!;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,15 +50,18 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
 
         final user = snapshot.data;
-        
-        // If logged out
+
+        // If logged out, clear cached state
         if (user == null) {
+          _cachedUid = null;
+          _userFuture = null;
+          _syncedTokenUid = null;
           return const LoginView();
         }
 
-        // If logged in, fetch user role from Firestore
+        // If logged in, fetch user role from Firestore (cached per UID)
         return FutureBuilder<DocumentSnapshot>(
-          future: FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
+          future: _getUserFuture(user.uid),
           builder: (context, userSnapshot) {
             if (userSnapshot.connectionState == ConnectionState.waiting) {
               return const Scaffold(
@@ -52,7 +71,37 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
             if (userSnapshot.hasError) {
               return Scaffold(
-                body: Center(child: Text('Error: ${userSnapshot.error}')),
+                body: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.wifi_off_rounded, size: 48, color: Colors.redAccent),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Unable to load your profile. Please check your connection and try again.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 15),
+                        ),
+                        const SizedBox(height: 20),
+                        ElevatedButton.icon(
+                          onPressed: _reload,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry'),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: () async {
+                            await PushNotificationService.clearUserToken(user.uid);
+                            await FirebaseAuth.instance.signOut();
+                          },
+                          child: const Text('Sign Out'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               );
             }
 
@@ -67,8 +116,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
                       const SizedBox(height: 16),
                       ElevatedButton(
                         onPressed: () async {
-                          await PushNotificationService.clearUserToken();
-                          FirebaseAuth.instance.signOut();
+                          await PushNotificationService.clearUserToken(user.uid);
+                          await FirebaseAuth.instance.signOut();
                         },
                         child: const Text('Sign Out'),
                       )
@@ -91,8 +140,13 @@ class _AuthWrapperState extends State<AuthWrapper> {
               );
             }
 
-            // Fetch and update FCM token in background
-            PushNotificationService.syncUserToken(user.uid);
+            // Sync FCM token once per authenticated session without blocking build
+            if (_syncedTokenUid != user.uid) {
+              _syncedTokenUid = user.uid;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                PushNotificationService.syncUserToken(user.uid);
+              });
+            }
 
             // Route based on role
             switch (userModel.role) {

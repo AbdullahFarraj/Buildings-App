@@ -10,6 +10,7 @@ import '../../services/storage_service.dart';
 import '../../services/notification_service.dart';
 import '../../core/enums/user_role.dart';
 import '../../core/theme/app_colors.dart';
+import '../../utils/phone_helper.dart';
 
 class ChatSheet extends StatefulWidget {
   final String chatId;
@@ -133,11 +134,13 @@ class _ChatSheetState extends State<ChatSheet> {
       }
 
       _messageController.clear();
-      _scrollController.animateTo(
-        0, // Reversed list
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0, // Reversed list
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -158,6 +161,15 @@ class _ChatSheetState extends State<ChatSheet> {
     );
 
     if (result != null) {
+      final fileSize = result.lengthSync() ?? await result.length();
+      if (!mounted) return;
+      if (fileSize != null && fileSize > StorageService.maxChatFileSizeBytes) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('File is too large. Maximum size is 10 MB.')),
+        );
+        return;
+      }
+
       String fileName = result.name;
       
       setState(() => _isSending = true);
@@ -371,6 +383,14 @@ class _ChatSheetState extends State<ChatSheet> {
                               const SizedBox(height: 8),
                               GestureDetector(
                                 onTap: () async {
+                                  if (!PhoneHelper.isSafeFirebaseStorageUrl(message.fileUrl)) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Blocked unsafe attachment link.')),
+                                      );
+                                    }
+                                    return;
+                                  }
                                   final url = Uri.tryParse(message.fileUrl!);
                                   if (url == null) return;
                                   try {

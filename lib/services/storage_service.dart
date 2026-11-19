@@ -5,9 +5,16 @@ import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
 class StorageService {
+  static const int maxChatFileSizeBytes = 10 * 1024 * 1024;
   final FirebaseStorage _storage = FirebaseStorage.instance;
   final ImagePicker _picker = ImagePicker();
   final Uuid _uuid = const Uuid();
+
+  static String sanitizeFileName(String fileName) {
+    final baseName = fileName.split(RegExp(r'[/\\]')).last.replaceAll('..', '');
+    final sanitized = baseName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    return sanitized.isEmpty ? 'attachment' : sanitized;
+  }
 
   /// Picks an image from the specified source with basic compression.
   Future<XFile?> pickImage(ImageSource source) async {
@@ -119,13 +126,24 @@ class StorageService {
 
   /// Uploads a generic file (document or image) for a chat and returns the download URL.
   Future<String?> uploadChatFile(dynamic file, String chatId, String fileName) async {
+    final safeName = sanitizeFileName(fileName);
+    if (file is File) {
+      final fileSize = await file.length();
+      if (fileSize > maxChatFileSizeBytes) {
+        throw Exception('File exceeds 10 MB limit.');
+      }
+    }
+    final Uint8List bytes = await file.readAsBytes();
+    if (bytes.length > maxChatFileSizeBytes) {
+      throw Exception('File exceeds 10 MB limit.');
+    }
+
     try {
-      final String uniqueFileName = '${_uuid.v4()}_$fileName';
+      final String uniqueFileName = '${_uuid.v4()}_$safeName';
       final Reference ref = _storage.ref().child('chats/$chatId/$uniqueFileName');
-      final Uint8List bytes = await file.readAsBytes();
       final UploadTask uploadTask = ref.putData(
         bytes,
-        SettableMetadata(contentType: _inferContentType(fileName)),
+        SettableMetadata(contentType: _inferContentType(safeName)),
       );
       final TaskSnapshot snapshot = await uploadTask;
       return await snapshot.ref.getDownloadURL();
@@ -137,12 +155,16 @@ class StorageService {
 
   /// Uploads a generic file using bytes (required for Web)
   Future<String?> uploadChatFileBytes(Uint8List bytes, String chatId, String fileName) async {
+    if (bytes.length > maxChatFileSizeBytes) {
+      throw Exception('File exceeds 10 MB limit.');
+    }
+    final safeName = sanitizeFileName(fileName);
     try {
-      final String uniqueFileName = '${_uuid.v4()}_$fileName';
+      final String uniqueFileName = '${_uuid.v4()}_$safeName';
       final Reference ref = _storage.ref().child('chats/$chatId/$uniqueFileName');
       final UploadTask uploadTask = ref.putData(
         bytes,
-        SettableMetadata(contentType: _inferContentType(fileName)),
+        SettableMetadata(contentType: _inferContentType(safeName)),
       );
       final TaskSnapshot snapshot = await uploadTask;
       return await snapshot.ref.getDownloadURL();

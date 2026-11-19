@@ -65,3 +65,6 @@ key.properties
 npm-debug.log*
 
 /android/build_error.txt
+
+# Firebase
+.firebase/

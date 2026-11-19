@@ -96,7 +96,7 @@ jobs:
       - name: Configure Flutter & Prepare Build Directories
         run: |
           flutter config --no-enable-swift-package-manager
-          mkdir -p build/ios/SourcePackages
+          mkdir -p build/ios/SourcePackages build/ios/symbols
 
       # 6. Install Flutter dependencies
       - name: Install Dependencies
@@ -105,7 +105,7 @@ jobs:
       # 7. Configure Flutter iOS Release & CocoaPods (increments build number automatically)
       - name: Prepare Flutter iOS & Pods
         run: |
-          flutter build ios --config-only --no-codesign --release --build-number=${{ github.run_number }}
+          flutter build ios --config-only --no-codesign --release --build-number=${{ github.run_number }} --obfuscate --split-debug-info=${{ github.workspace }}/build/ios/symbols
           cd ios
           pod install --repo-update || pod install
 

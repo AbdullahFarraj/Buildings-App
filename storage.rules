@@ -7,31 +7,67 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function userDocExists() {
+      return firestore.exists(/databases/(default)/documents/users/$(request.auth.uid));
+    }
+
+    function userDocData() {
+      return userDocExists()
+        ? firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data
+        : {};
+    }
+
     function userRole() {
-      return firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
-        ? firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('role', '')
-        : '';
-    }
-
-    function isAdmin() {
-      return isAuthenticated() && (
-        request.auth.token.get('role', '') == 'admin' ||
-        userRole() == 'admin'
-      );
-    }
-
-    function isTechnician() {
-      return isAuthenticated() && (
-        request.auth.token.get('role', '') == 'technician' ||
-        userRole() == 'technician'
-      );
+      return userDocData().get('role', '');
     }
 
     function isDemoUser() {
       return isAuthenticated() && (
         (request.auth.token.email != null && request.auth.token.email.matches('^demo\\..*')) ||
-        request.auth.token.get('isDemo', false) == true
+        request.auth.token.get('isDemo', false) == true ||
+        userDocData().get('isDemo', false) == true
       );
+    }
+
+    function isRealAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.get('role', '') == 'admin' ||
+        userRole() == 'admin'
+      ) && !isDemoUser();
+    }
+
+    function isDemoAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.get('role', '') == 'admin' ||
+        userRole() == 'admin'
+      ) && isDemoUser();
+    }
+
+    function isRealTechnician() {
+      return isAuthenticated() && (
+        request.auth.token.get('role', '') == 'technician' ||
+        userRole() == 'technician'
+      ) && !isDemoUser();
+    }
+
+    function isDemoTechnician() {
+      return isAuthenticated() && (
+        request.auth.token.get('role', '') == 'technician' ||
+        userRole() == 'technician'
+      ) && isDemoUser();
+    }
+
+    function isTargetUserDemo(uid) {
+      return firestore.exists(/databases/(default)/documents/users/$(uid))
+          && firestore.get(/databases/(default)/documents/users/$(uid)).data.get('isDemo', false) == true;
+    }
+
+    function taskExists(taskId) {
+      return firestore.exists(/databases/(default)/documents/tasks/$(taskId));
+    }
+
+    function taskData(taskId) {
+      return firestore.get(/databases/(default)/documents/tasks/$(taskId)).data;
     }
 
     function isValidDocSize() {
@@ -46,60 +82,111 @@ service firebase.storage {
       return request.resource != null && request.resource.size < 10 * 1024 * 1024;
     }
 
-    function isImageFile() {
-      return request.resource.contentType != null
-          && request.resource.contentType.matches('image/.*');
+    function isSafeFileName(fileName) {
+      return fileName.size() > 0
+          && fileName.size() <= 255
+          && !fileName.matches('.*\\.\\..*');
     }
 
-    function isDocOrImageFile() {
-      return request.resource.contentType == null
-          || request.resource.contentType.matches('image/.*')
-          || request.resource.contentType == 'application/pdf'
-          || request.resource.contentType == 'application/msword'
-          || request.resource.contentType == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-          || request.resource.contentType == 'application/octet-stream';
+    function isStrictImageFile() {
+      return request.resource != null
+          && request.resource.contentType != null
+          && request.resource.contentType.matches('image/(jpeg|jpg|png|webp|heic|heif)');
     }
 
-    // 1. العقود (contracts) - بدقة عالية حتى 25MB ويقرؤها وينزلها صاحب العقد أو الأدمن
+    function isStrictDocOrImageFile() {
+      return isStrictImageFile()
+          || (request.resource != null && (
+               request.resource.contentType == 'application/pdf'
+            || request.resource.contentType == 'application/msword'
+            || request.resource.contentType == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          ));
+    }
+
+    // Backwards-compatible check for AdminTenantDetailsView._uploadContractFile (v1.0.1 omits SettableMetadata)
+    function isValidContractFile(fileName) {
+      return fileName.matches('(?i).*\\.(pdf|jpg|jpeg|png|webp)$')
+          && (isStrictDocOrImageFile()
+              || request.resource.contentType == null
+              || request.resource.contentType == 'application/octet-stream');
+    }
+
+    function canAccessChat(chatId) {
+      return isRealAdmin()
+          || (isAuthenticated() && request.auth.uid == chatId)
+          || (isDemoAdmin() && isTargetUserDemo(chatId))
+          || (taskExists(chatId) && (
+               (isDemoAdmin() && taskData(chatId).get('isDemo', false) == true)
+            || (isAuthenticated()
+                && (taskData(chatId).tenantId == request.auth.uid || taskData(chatId).get('technicianId', '') == request.auth.uid)
+                && (isDemoUser() == (taskData(chatId).get('isDemo', false) == true)))
+          ));
+    }
+
+    // 1. العقود (contracts) - بدقة عالية حتى 25MB ويقرؤها صاحب العقد الحقيقي أو الأدمن الحقيقي فقط
     match /contracts/{userId}/{fileName} {
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
-      allow create, update: if isAdmin() && !isDemoUser() && isValidDocSize() && isDocOrImageFile();
-      allow delete: if isAdmin() && !isDemoUser();
+      allow read: if isAuthenticated() && ((request.auth.uid == userId && !isDemoUser()) || isRealAdmin());
+      allow create, update: if isRealAdmin() && isValidDocSize() && isSafeFileName(fileName) && isValidContractFile(fileName);
+      allow delete: if isRealAdmin();
     }
 
-    // 2. مستندات المستأجر الإضافية (documents) - خاصة بصاحب الحساب والأدمن فقط
+    // 2. مستندات المستأجر الإضافية (documents) - خاصة بصاحب الحساب الحقيقي والأدمن الحقيقي فقط
     match /documents/{userId}/{fileName} {
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow read: if isAuthenticated() && ((request.auth.uid == userId && !isDemoUser()) || isRealAdmin());
       allow create, update: if isAuthenticated()
-                            && (request.auth.uid == userId || isAdmin())
                             && !isDemoUser()
+                            && (request.auth.uid == userId || isRealAdmin())
                             && isValidDocSize()
-                            && isDocOrImageFile();
-      allow delete: if isAuthenticated() && (request.auth.uid == userId || isAdmin()) && !isDemoUser();
+                            && isSafeFileName(fileName)
+                            && isStrictDocOrImageFile();
+      allow delete: if isAuthenticated()
+                    && !isDemoUser()
+                    && (request.auth.uid == userId || isRealAdmin());
     }
 
-    // 3. صور طلبات الصيانة (tasks) - صور حصرية بحد أقصى 5MB لتوفير المساحة والترافيك
+    // 3. صور طلبات الصيانة (tasks) - مقيدة بصاحب الطلب والفنيين والإدارة ضمن نفس البيئة فقط
     match /tasks/{userId}/{fileName} {
-      allow read: if isAuthenticated();
+      allow read: if isRealAdmin()
+                  || (isAuthenticated() && request.auth.uid == userId)
+                  || (isRealTechnician() && !isTargetUserDemo(userId))
+                  || ((isDemoAdmin() || isDemoTechnician()) && isTargetUserDemo(userId));
       allow create, update: if isAuthenticated()
-                            && (request.auth.uid == userId || isAdmin())
+                            && (request.auth.uid == userId || isRealAdmin())
                             && isValidImageSize()
-                            && isImageFile();
-      allow delete: if isAuthenticated() && (request.auth.uid == userId || isAdmin()) && !isDemoUser();
+                            && isStrictImageFile()
+                            && isSafeFileName(fileName);
+      allow delete: if isAuthenticated()
+                    && !isDemoUser()
+                    && (request.auth.uid == userId || isRealAdmin());
     }
 
-    // 4. صور إثبات إنجاز الصيانة (completions) - يرفعها الفني أو الأدمن كصور فقط بحد أقصى 5MB
+    // 4. صور إثبات إنجاز الصيانة (completions) - يقرؤها ويرفعها أطراف المهمة أو الإدارة فقط
     match /completions/{taskId}/{fileName} {
-      allow read: if isAuthenticated();
-      allow create, update: if (isTechnician() || isAdmin()) && isValidImageSize() && isImageFile();
-      allow delete: if isAdmin() && !isDemoUser();
+      allow read: if isRealAdmin()
+                  || (isDemoAdmin() && taskExists(taskId) && taskData(taskId).get('isDemo', false) == true)
+                  || (isAuthenticated()
+                      && taskExists(taskId)
+                      && (taskData(taskId).tenantId == request.auth.uid || taskData(taskId).get('technicianId', '') == request.auth.uid)
+                      && (isDemoUser() == (taskData(taskId).get('isDemo', false) == true)));
+      allow create, update: if (isRealAdmin()
+                                || (isAuthenticated()
+                                    && taskExists(taskId)
+                                    && taskData(taskId).get('technicianId', '') == request.auth.uid
+                                    && (isDemoUser() == (taskData(taskId).get('isDemo', false) == true))))
+                            && isValidImageSize()
+                            && isStrictImageFile()
+                            && isSafeFileName(fileName);
+      allow delete: if isRealAdmin();
     }
 
-    // 5. مرفقات وصور المحادثات (chats) - بحد أقصى 10MB
+    // 5. مرفقات وصور المحادثات (chats) - مقيدة بأطراف المحادثة والإدارة الحقيقية فقط
     match /chats/{chatId}/{fileName} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidChatSize() && isDocOrImageFile();
-      allow update, delete: if isAdmin() && !isDemoUser();
+      allow read: if canAccessChat(chatId);
+      allow create: if canAccessChat(chatId)
+                    && isValidChatSize()
+                    && isStrictDocOrImageFile()
+                    && isSafeFileName(fileName);
+      allow update, delete: if isRealAdmin();
     }
 
     match /{allPaths=**} {

@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
+import '../../services/firestore_service.dart';
 import '../shared/chat_sheet.dart';
 
 class AdminInboxView extends StatelessWidget {
@@ -15,11 +16,19 @@ class AdminInboxView extends StatelessWidget {
       return const Center(child: Text('Not logged in'));
     }
 
+    final isDemo = FirestoreService().isCurrentSessionDemo;
+    final Stream<QuerySnapshot> stream = isDemo
+        ? FirebaseFirestore.instance
+            .collection('direct_chats')
+            .where('isDemo', isEqualTo: true)
+            .snapshots()
+        : FirebaseFirestore.instance
+            .collection('direct_chats')
+            .orderBy('lastMessageAt', descending: true)
+            .snapshots();
+
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('direct_chats')
-          .orderBy('lastMessageAt', descending: true)
-          .snapshots(),
+      stream: stream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -29,7 +38,21 @@ class AdminInboxView extends StatelessWidget {
           return Center(child: Text('Error: ${snapshot.error}'));
         }
 
-        final docs = snapshot.data?.docs ?? [];
+        var docs = List<QueryDocumentSnapshot>.from(snapshot.data?.docs ?? []);
+        if (isDemo) {
+          docs.sort((a, b) {
+            final tsA = (a.data() as Map<String, dynamic>)['lastMessageAt'] as Timestamp?;
+            final tsB = (b.data() as Map<String, dynamic>)['lastMessageAt'] as Timestamp?;
+            final msA = tsA?.millisecondsSinceEpoch ?? 0;
+            final msB = tsB?.millisecondsSinceEpoch ?? 0;
+            return msB.compareTo(msA);
+          });
+        } else {
+          docs = docs
+              .where((d) => (d.data() as Map<String, dynamic>)['isDemo'] != true)
+              .toList();
+        }
+
         if (docs.isEmpty) {
           return const Center(
             child: Text(
@@ -46,18 +69,18 @@ class AdminInboxView extends StatelessWidget {
           itemBuilder: (context, index) {
             final data = docs[index].data() as Map<String, dynamic>;
             final chatId = docs[index].id;
-            
+
             final lastMessage = data['lastMessage'] as String? ?? 'New Message';
             final lastSenderName = data['lastSenderName'] as String? ?? 'User';
             final lastMessageAt = data['lastMessageAt'] as Timestamp?;
-            final dateStr = lastMessageAt != null 
+            final dateStr = lastMessageAt != null
                 ? DateFormat('MMM d, h:mm a').format(lastMessageAt.toDate())
                 : '';
 
             return InkWell(
               onTap: () {
                 final userName = user.displayName ?? 'Admin';
-                
+
                 ChatSheet.show(
                   context: context,
                   chatId: chatId,

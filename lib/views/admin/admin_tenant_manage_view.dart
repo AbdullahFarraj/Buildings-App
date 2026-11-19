@@ -3,14 +3,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import 'package:intl/intl.dart';
 
 import '../../models/user_model.dart';
 import '../../services/firestore_service.dart';
+import '../../services/notification_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../utils/phone_helper.dart';
 import 'admin_tenant_details_view.dart';
 
 class AdminTenantManageView extends StatefulWidget {
@@ -36,6 +37,13 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
     _tenant = widget.tenant;
   }
 
+  @override
+  void dispose() {
+    _alertTitleController.dispose();
+    _alertMessageController.dispose();
+    super.dispose();
+  }
+
   String _inferContentType(String fileName) {
     final ext = fileName.split('.').last.toLowerCase();
     switch (ext) {
@@ -58,8 +66,15 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
   }
 
   Future<void> _openUrl(String? urlString) async {
-    if (urlString == null || urlString.isEmpty) return;
-    final uri = Uri.tryParse(urlString);
+    if (!PhoneHelper.isSafeHttpsUrl(urlString)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid or unsafe document link')),
+        );
+      }
+      return;
+    }
+    final uri = Uri.tryParse(urlString!.trim());
     if (uri == null) return;
     try {
       final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -140,6 +155,14 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
     );
     if (platformFile != null) {
+      final fileSize = platformFile.lengthSync() ?? await platformFile.length();
+      if (!mounted) return;
+      if (fileSize != null && fileSize > 25 * 1024 * 1024) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('File is too large. Maximum size is 25 MB.')),
+        );
+        return;
+      }
       setState(() => _isLoading = true);
       final ext = platformFile.extension ?? 'pdf';
       final fileName = 'contract_${const Uuid().v4()}.$ext';
@@ -149,14 +172,16 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
       if (url != null) {
         final updatedTenant = _tenant.copyWith(contractUrl: url);
         await _firestoreService.updateUser(updatedTenant.uid, {'contractUrl': url});
+        if (!mounted) return;
         setState(() {
           _tenant = updatedTenant;
           _isLoading = false;
         });
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Contract uploaded')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Contract uploaded')));
       } else {
+        if (!mounted) return;
         setState(() => _isLoading = false);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to upload contract')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to upload contract')));
       }
     }
   }
@@ -167,25 +192,43 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
     );
     if (platformFile != null) {
+      final fileSize = platformFile.lengthSync() ?? await platformFile.length();
+      if (!mounted) return;
+      if (fileSize != null && fileSize > 25 * 1024 * 1024) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('File is too large. Maximum size is 25 MB.')),
+        );
+        return;
+      }
       // Ask for document name
       final nameController = TextEditingController(text: platformFile.name);
-      if (!mounted) return;
-      final confirm = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Document Name'),
-          content: TextField(
-            controller: nameController,
-            decoration: const InputDecoration(labelText: 'Enter a name for this document'),
+      if (!mounted) {
+        nameController.dispose();
+        return;
+      }
+      bool? confirm;
+      String docTitle = '';
+      try {
+        confirm = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Document Name'),
+            content: TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'Enter a name for this document'),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Upload')),
+            ],
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Upload')),
-          ],
-        ),
-      );
+        );
+        docTitle = nameController.text.trim();
+      } finally {
+        nameController.dispose();
+      }
 
-      if (confirm == true && nameController.text.isNotEmpty) {
+      if (confirm == true && docTitle.isNotEmpty) {
         setState(() => _isLoading = true);
         final ext = platformFile.extension ?? 'pdf';
         final fileName = '${const Uuid().v4()}.$ext';
@@ -194,7 +237,7 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
         
         if (url != null) {
           final newDoc = {
-            'name': nameController.text.trim(),
+            'name': docTitle,
             'url': url,
             'uploadedAt': DateTime.now().toIso8601String(),
           };
@@ -203,14 +246,16 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
           
           final updatedTenant = _tenant.copyWith(documents: currentDocs);
           await _firestoreService.updateUser(updatedTenant.uid, {'documents': currentDocs});
+          if (!mounted) return;
           setState(() {
             _tenant = updatedTenant;
             _isLoading = false;
           });
-          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Document uploaded')));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Document uploaded')));
         } else {
+          if (!mounted) return;
           setState(() => _isLoading = false);
-          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to upload document')));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to upload document')));
         }
       }
     }
@@ -232,43 +277,47 @@ class _AdminTenantManageViewState extends State<AdminTenantManageView> {
     if (confirm == true) {
       setState(() => _isLoading = true);
       final currentDocs = List<Map<String, String>>.from(_tenant.documents ?? []);
-      currentDocs.removeAt(index);
-      
+      final removedDoc = currentDocs.removeAt(index);
+      final docUrl = removedDoc['url'];
+      if (docUrl != null && docUrl.isNotEmpty) {
+        FirebaseStorage.instance.refFromURL(docUrl).delete().catchError((_) {});
+      }
+
       final updatedTenant = _tenant.copyWith(documents: currentDocs);
       await _firestoreService.updateUser(updatedTenant.uid, {'documents': currentDocs});
+      if (!mounted) return;
       setState(() {
         _tenant = updatedTenant;
         _isLoading = false;
       });
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Document deleted')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Document deleted')));
     }
   }
 
   Future<void> _sendAlert() async {
-    if (_alertTitleController.text.isEmpty || _alertMessageController.text.isEmpty) {
+    if (_alertTitleController.text.trim().isEmpty || _alertMessageController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter title and message')));
       return;
     }
 
     setState(() => _isLoading = true);
     try {
-      await FirebaseFirestore.instance.collection('notifications').add({
-        'userId': _tenant.uid,
-        'title': _alertTitleController.text,
-        'message': _alertMessageController.text,
-        'timestamp': FieldValue.serverTimestamp(),
-        'createdAt': FieldValue.serverTimestamp(),
-        'isRead': false,
-      });
+      await NotificationService().sendNotification(
+        userId: _tenant.uid,
+        title: _alertTitleController.text.trim(),
+        message: _alertMessageController.text.trim(),
+      );
+      if (!mounted) return;
       setState(() {
         _alertTitleController.clear();
         _alertMessageController.clear();
         _isLoading = false;
       });
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Alert sent successfully')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Alert sent successfully')));
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to send alert: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to send alert: $e')));
     }
   }
 

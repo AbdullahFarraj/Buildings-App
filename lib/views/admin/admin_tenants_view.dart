@@ -59,6 +59,7 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
           .toSet()
           .toList()..sort();
 
+      if (!mounted) return;
       setState(() {
         _allTenants = tenants;
         _buildings = ['All Buildings', ...dynamicBuildings];
@@ -69,6 +70,7 @@ class _AdminTenantsViewState extends State<AdminTenantsView> {
       });
       _applyFilters();
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;

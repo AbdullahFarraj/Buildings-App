@@ -81,6 +81,7 @@ class _AdminContractsViewState extends State<AdminContractsView> {
           .toList()
         ..sort();
 
+      if (!mounted) return;
       setState(() {
         _allContracts = contracts;
         _buildings = ['All Buildings', ...dynamicBuildings];
@@ -92,6 +93,7 @@ class _AdminContractsViewState extends State<AdminContractsView> {
 
       _applyFilters();
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
