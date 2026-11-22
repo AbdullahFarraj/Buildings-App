@@ -9,14 +9,14 @@ function isDemoIdentity({ email, data, token } = {}) {
 }
 
 function getFirebaseWebApiKey() {
-  if (process.env.FIREBASE_WEB_API_KEY) {
-    return process.env.FIREBASE_WEB_API_KEY;
+  const apiKey = process.env.FIREBASE_WEB_API_KEY;
+  if (!apiKey) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "FIREBASE_WEB_API_KEY environment variable is not configured."
+    );
   }
-  const projectId = process.env.GCLOUD_PROJECT || admin.app().options.projectId || "";
-  if (projectId === "binshafar-properties-dev") {
-    return "AIzaSyABj5AnKJnMNOc-T6DL9hCDoiD0Y86BvCU";
-  }
-  return "AIzaSyDnomqKd15sF6Z_MosqCiaKlcS674on6Bs";
+  return apiKey;
 }
 
 function sanitizeUaePhoneForAuth(raw) {

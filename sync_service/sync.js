@@ -781,8 +781,8 @@ async function runSync() {
       }
       claimedEmails.add(email.toLowerCase());
 
-      // Default password: phone if available, else Elite@123456
-      const defaultPassword = primaryMobile || 'Elite@123456';
+      // Default password: phone if available, else SYNC_DEFAULT_PASSWORD or a random temporary password
+      const defaultPassword = primaryMobile || process.env.SYNC_DEFAULT_PASSWORD || crypto.randomBytes(16).toString('base64url');
 
       // Respect user-initiated account deletion: skip if email or any phone belongs to deleted_accounts
       if (deletedEmails.has(email.toLowerCase()) || validMobiles.some(m => deletedPhones.has(m))) {

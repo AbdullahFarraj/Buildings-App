@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import '../../core/theme/app_colors.dart';
 
+const String _demoAccountPassword = String.fromEnvironment('DEMO_ACCOUNT_PASSWORD');
+
 class LoginView extends StatefulWidget {
   const LoginView({super.key});
 
@@ -225,7 +227,7 @@ class _LoginViewState extends State<LoginView> {
                   subtitle: 'Alexander Wright - Tenant',
                   onTap: () {
                     Navigator.pop(ctx);
-                    _applyDemoAccount('demo.tenant@elitelivingre.ae', 'Demo@123456');
+                    _applyDemoAccount('demo.tenant@elitelivingre.ae');
                   },
                 ),
                 const Divider(),
@@ -235,7 +237,7 @@ class _LoginViewState extends State<LoginView> {
                   subtitle: 'Rashid Al-Mansoor - Maintenance Technician',
                   onTap: () {
                     Navigator.pop(ctx);
-                    _applyDemoAccount('demo.technician@elitelivingre.ae', 'Demo@123456');
+                    _applyDemoAccount('demo.technician@elitelivingre.ae');
                   },
                 ),
                 const Divider(),
@@ -245,7 +247,7 @@ class _LoginViewState extends State<LoginView> {
                   subtitle: 'Property Manager - Admin Access',
                   onTap: () {
                     Navigator.pop(ctx);
-                    _applyDemoAccount('demo.admin@elitelivingre.ae', 'Demo@123456');
+                    _applyDemoAccount('demo.admin@elitelivingre.ae');
                   },
                 ),
               ],
@@ -274,9 +276,17 @@ class _LoginViewState extends State<LoginView> {
     );
   }
 
-  void _applyDemoAccount(String email, String password) {
+  void _applyDemoAccount(String email) {
+    if (_demoAccountPassword.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Demo mode is not configured for this build.'),
+        ),
+      );
+      return;
+    }
     _emailController.text = email;
-    _passwordController.text = password;
+    _passwordController.text = _demoAccountPassword;
     _login();
   }
 
