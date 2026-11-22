@@ -125,13 +125,11 @@ class StorageService {
   }
 
   /// Uploads a generic file (document or image) for a chat and returns the download URL.
-  Future<String?> uploadChatFile(dynamic file, String chatId, String fileName) async {
+  Future<String?> uploadChatFile(File file, String chatId, String fileName) async {
     final safeName = sanitizeFileName(fileName);
-    if (file is File) {
-      final fileSize = await file.length();
-      if (fileSize > maxChatFileSizeBytes) {
-        throw Exception('File exceeds 10 MB limit.');
-      }
+    final fileSize = await file.length();
+    if (fileSize > maxChatFileSizeBytes) {
+      throw Exception('File exceeds 10 MB limit.');
     }
     final Uint8List bytes = await file.readAsBytes();
     if (bytes.length > maxChatFileSizeBytes) {

@@ -77,8 +77,8 @@ service cloud.firestore {
     // 0. فهرس الهواتف لتسجيل الدخول السريع (phone_index)
     // ==========================================
     match /phone_index/{phone} {
-      // القراءة: مسموح جلب مستند واحد برقم معروف فقط (get)، ويُمنع سرد/تحميل كامل الفهرس (list)
-      allow get: if true;
+      // القراءة: مقتصرة على الأدمن الحقيقي (تسجيل الدخول يتم عبر Cloud Function باستخدام Admin SDK)
+      allow get: if isRealAdmin();
       allow list: if isRealAdmin();
 
       // الكتابة: للأدمن الحقيقي، أو لمستخدم حقيقي مسجل يربط رقماً إماراتياً صحيحاً بإيميله ومعرفه فقط
@@ -326,6 +326,9 @@ service cloud.firestore {
       allow create, update: if (isRealAdmin()
                                 || (isOwner(chatId) && isRegistered())
                                 || (isDemoAdmin() && isDemoChatOwner(chatId)))
+                            && (isDemoUser()
+                                ? isDemoDoc(request.resource.data)
+                                : !isDemoDoc(request.resource.data))
                             && request.resource.data.keys().hasOnly(['lastMessageAt', 'lastMessage', 'lastSenderName', 'isDemo'])
                             && (!('lastMessage' in request.resource.data)
                                 || (request.resource.data.lastMessage is string

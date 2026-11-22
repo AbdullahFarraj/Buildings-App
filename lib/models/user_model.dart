@@ -1,4 +1,13 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../core/enums/user_role.dart';
+
+DateTime? _parseUserDate(Object? val) {
+  if (val == null) return null;
+  if (val is DateTime) return val;
+  if (val is Timestamp) return val.toDate().toLocal();
+  if (val is String) return DateTime.tryParse(val)?.toLocal();
+  return null;
+}
 
 class UserModel {
   final String uid;
@@ -73,16 +82,6 @@ class UserModel {
           .toList();
     }
 
-    DateTime? parseDate(dynamic val) {
-      if (val == null) return null;
-      if (val is DateTime) return val;
-      if (val is String) return DateTime.tryParse(val)?.toLocal();
-      try {
-        return (val as dynamic).toDate().toLocal();
-      } catch (_) {}
-      return null;
-    }
-
     return UserModel(
       uid: documentId,
       name: map['name'] ?? '',
@@ -94,8 +93,8 @@ class UserModel {
       profession: map['profession'],
       averageRating: map['averageRating']?.toDouble(),
       totalRatings: map['totalRatings']?.toInt(),
-      contractStartDate: parseDate(map['contractStartDate']),
-      contractEndDate: parseDate(map['contractEndDate']),
+      contractStartDate: _parseUserDate(map['contractStartDate']),
+      contractEndDate: _parseUserDate(map['contractEndDate']),
       contractUrl: map['contractUrl'],
       documents: (map['documents'] as List<dynamic>?)
           ?.whereType<Map>()
@@ -204,23 +203,13 @@ class TenantProperty {
   });
 
   factory TenantProperty.fromMap(Map<String, dynamic> map) {
-    DateTime? parseDate(dynamic val) {
-      if (val == null) return null;
-      if (val is DateTime) return val;
-      if (val is String) return DateTime.tryParse(val)?.toLocal();
-      try {
-        return (val as dynamic).toDate().toLocal();
-      } catch (_) {}
-      return null;
-    }
-
     return TenantProperty(
       buildingName: (map['buildingName'] ?? '').toString().trim(),
       unitNumber: (map['unitNumber'] ?? '').toString().trim(),
       unitType: map['unitType']?.toString().trim(),
       contractCode: map['contractCode']?.toString().trim(),
-      startDate: parseDate(map['startDate']),
-      endDate: parseDate(map['endDate']),
+      startDate: _parseUserDate(map['startDate']),
+      endDate: _parseUserDate(map['endDate']),
       rentAmount: (map['rentAmount'] as num?)?.toDouble(),
       yearValue: (map['yearValue'] as num?)?.toDouble(),
     );

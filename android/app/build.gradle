@@ -47,7 +47,10 @@ android {
         release {
             if (keystoreProperties['storeFile'] && file(keystoreProperties['storeFile']).exists()) {
                 signingConfig signingConfigs.release
+            } else if (System.getenv('REQUIRE_RELEASE_SIGNING') == 'true') {
+                throw new GradleException('Release keystore (android/key.properties) is required when REQUIRE_RELEASE_SIGNING=true.')
             } else {
+                logger.warn('WARNING: Release keystore not found; falling back to debug signing.')
                 signingConfig signingConfigs.debug
             }
         }

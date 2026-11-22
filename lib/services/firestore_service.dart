@@ -126,6 +126,7 @@ class FirestoreService {
     if (isCurrentSessionDemo) {
       return _tasksCollection
           .where('isDemo', isEqualTo: true)
+          .limit(limit)
           .snapshots()
           .map((snapshot) {
         final list = snapshot.docs.map((doc) {
@@ -487,11 +488,12 @@ class FirestoreService {
   }
 
   /// Gets a list of all contracts
-  Future<List<ContractModel>> getContracts() async {
+  Future<List<ContractModel>> getContracts({int limit = 200}) async {
     if (isCurrentSessionDemo) {
       final snapshot = await _firestore
           .collection('contracts')
           .where('isDemo', isEqualTo: true)
+          .limit(limit)
           .get();
       final list = snapshot.docs.map((doc) => ContractModel.fromFirestore(doc)).toList();
       list.sort((a, b) {
@@ -507,7 +509,7 @@ class FirestoreService {
       });
       return list;
     }
-    final snapshot = await _firestore.collection('contracts').get();
+    final snapshot = await _firestore.collection('contracts').limit(limit).get();
     final list = snapshot.docs
         .where((doc) => doc.data()['isDemo'] != true)
         .map((doc) => ContractModel.fromFirestore(doc))
@@ -796,10 +798,11 @@ class FirestoreService {
   }
 
   /// Stream of all cheques (for Admin)
-  Stream<List<ChequeModel>> getAllChequesStream() {
+  Stream<List<ChequeModel>> getAllChequesStream({int limit = 200}) {
     if (isCurrentSessionDemo) {
       return _chequesCollection
           .where('isDemo', isEqualTo: true)
+          .limit(limit)
           .snapshots()
           .map((snapshot) {
         final list = snapshot.docs.map((doc) => ChequeModel.fromFirestore(doc)).toList();
@@ -808,6 +811,7 @@ class FirestoreService {
       });
     }
     return _chequesCollection
+        .limit(limit)
         .snapshots()
         .map((snapshot) {
       final list = snapshot.docs
@@ -820,16 +824,17 @@ class FirestoreService {
   }
 
   /// Future list of all cheques (for Admin)
-  Future<List<ChequeModel>> getAllCheques() async {
+  Future<List<ChequeModel>> getAllCheques({int limit = 200}) async {
     if (isCurrentSessionDemo) {
       final snapshot = await _chequesCollection
           .where('isDemo', isEqualTo: true)
+          .limit(limit)
           .get();
       final list = snapshot.docs.map((doc) => ChequeModel.fromFirestore(doc)).toList();
       list.sort((a, b) => a.dueDate.compareTo(b.dueDate));
       return list;
     }
-    final snapshot = await _chequesCollection.get();
+    final snapshot = await _chequesCollection.limit(limit).get();
     final list = snapshot.docs
         .where((doc) => (doc.data() as Map<String, dynamic>)['isDemo'] != true)
         .map((doc) => ChequeModel.fromFirestore(doc))
